@@ -20,6 +20,7 @@
     "@clariodesk/types": "*",
     "bullmq": "^5.34.5",
     "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.2",
     "ioredis": "^5.4.2"
   }
 }

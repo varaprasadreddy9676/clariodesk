@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ThrottlerModule } from "@nestjs/throttler";
 import { CoreModule } from "./core/core.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { WebhooksModule } from "./webhooks/webhooks.module.js";
@@ -18,6 +19,7 @@ import { ConversationsModule } from "./conversations/conversations.module.js";
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 10 }]),
     CoreModule,
     AuthModule,
     WebhooksModule,

@@ -1,4 +1,5 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { Body, Controller, Post, UseGuards } from "@nestjs/common";
+import { ThrottlerGuard } from "@nestjs/throttler";
 import { z } from "zod";
 import { loginSchema } from "@clariodesk/schemas";
 import { ZodValidationPipe } from "../common/zod.pipe.js";
@@ -16,6 +17,7 @@ const registerSchema = z.object({
   displayName: z.string().min(1).max(200),
 });
 
+@UseGuards(ThrottlerGuard)
 @Controller("auth")
 export class AuthController {
   constructor(private readonly auth: AuthService) {}

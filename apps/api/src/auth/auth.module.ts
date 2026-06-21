@@ -12,7 +12,7 @@ import { JwtAuthGuard } from "./jwt-auth.guard.js";
       inject: [TOKENS.CONFIG],
       useFactory: (config: AppConfig) => ({
         secret: config.JWT_SECRET,
-        signOptions: { expiresIn: config.JWT_EXPIRES_IN },
+        signOptions: { expiresIn: config.JWT_EXPIRES_IN as `${number}${"s" | "m" | "h" | "d"}` },
       }),
     }),
   ],

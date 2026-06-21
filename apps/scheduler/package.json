@@ -14,6 +14,6 @@
     "@clariodesk/logger": "*",
     "@clariodesk/storage": "*",
     "dotenv": "^16.4.7",
-    "drizzle-orm": "^0.38.2"
+    "drizzle-orm": "^0.45.2"
   }
 }
