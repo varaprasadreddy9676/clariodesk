@@ -158,9 +158,9 @@ describe("WhatsApp-style sort helpers", () => {
     expect(filterChannelsByView([inbox, unread, archived], "unread")).toEqual([
       unread,
     ]);
-    expect(
-      filterChannelsByView([inbox, unread, archived], "archived"),
-    ).toEqual([archived]);
+    expect(filterChannelsByView([inbox, unread, archived], "archived")).toEqual(
+      [archived],
+    );
   });
 
   it("renders messages oldest-to-newest in the visible thread", () => {

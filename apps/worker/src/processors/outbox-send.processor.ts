@@ -39,7 +39,10 @@ export function makeOutboxSendProcessor(deps: WorkerDeps) {
       )
       .returning();
     if (!outbox) {
-      log.info({ outboxId }, "outbox already claimed, sent, or cancelled — skipping");
+      log.info(
+        { outboxId },
+        "outbox already claimed, sent, or cancelled — skipping",
+      );
       return;
     }
 

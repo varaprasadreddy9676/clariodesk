@@ -372,9 +372,7 @@ export function clarioMessageToNormalizedEvent(
   return toNormalizedEvent(message, isHistorySync);
 }
 
-function toGatewayChat(
-  chat: GatewayChatPayload & { id: string },
-): GatewayChat {
+function toGatewayChat(chat: GatewayChatPayload & { id: string }): GatewayChat {
   return {
     providerChatId: chat.id,
     title: chat.name ?? null,
@@ -382,9 +380,7 @@ function toGatewayChat(
     channelType:
       chat.channelType ?? (chat.id.endsWith("@g.us") ? "group" : "direct"),
     participantCount: chat.participantsCount,
-    ...(typeof chat.isPinned === "boolean"
-      ? { isPinned: chat.isPinned }
-      : {}),
+    ...(typeof chat.isPinned === "boolean" ? { isPinned: chat.isPinned } : {}),
     ...(typeof chat.isMuted === "boolean" ? { isMuted: chat.isMuted } : {}),
     ...(typeof chat.isArchived === "boolean"
       ? { isArchived: chat.isArchived }

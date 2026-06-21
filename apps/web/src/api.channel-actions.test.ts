@@ -7,10 +7,11 @@ afterEach(() => {
 
 describe("ClarioApiClient channel actions", () => {
   it("sends target state to the synchronized action endpoint", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ channelId: "channel-1" }), {
-        status: 200,
-      }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ channelId: "channel-1" }), {
+          status: 200,
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
     const api = new ClarioApiClient(() => ({
@@ -35,8 +36,11 @@ describe("ClarioApiClient channel actions", () => {
   });
 
   it("clears the current user's explicit unread marker", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ isMarkedUnread: false }), { status: 200 }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ isMarkedUnread: false }), {
+          status: 200,
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
     const api = new ClarioApiClient(() => ({

@@ -328,9 +328,7 @@ export class GatewaySession extends EventEmitter {
         // WhatsApp may withhold contact metadata because of privacy settings.
       }
     }
-    const avatarUrl = await client
-      .getProfilePicUrl(id)
-      .catch(() => undefined);
+    const avatarUrl = await client.getProfilePicUrl(id).catch(() => undefined);
     return {
       id,
       name,
@@ -592,7 +590,10 @@ function requireChatMethod(
   return method.bind(chat) as () => Promise<unknown>;
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([

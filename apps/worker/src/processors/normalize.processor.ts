@@ -58,25 +58,70 @@ export function makeNormalizeProcessor(deps: WorkerDeps) {
     }
 
     try {
-    for (const event of events) {
-      if (storm.throttleMs > 0) await sleep(storm.throttleMs);
-      const outcome = await normalizeEvent(
-        event,
-        {
-          workspaceId,
-          phoneInstanceId,
-          rawEventRefId,
-          phoneOwnerProviderId: null,
-          phoneRestricted,
-          isReconnectSync,
-          staleSyncThresholdSeconds: deps.config.STALE_SYNC_THRESHOLD_SECONDS,
-          nowMs: Date.now(),
-        },
-        store,
-      );
+      for (const event of events) {
+        if (storm.throttleMs > 0) await sleep(storm.throttleMs);
+        const outcome = await normalizeEvent(
+          event,
+          {
+            workspaceId,
+            phoneInstanceId,
+            rawEventRefId,
+            phoneOwnerProviderId: null,
+            phoneRestricted,
+            isReconnectSync,
+            staleSyncThresholdSeconds: deps.config.STALE_SYNC_THRESHOLD_SECONDS,
+            nowMs: Date.now(),
+          },
+          store,
+        );
 
-      if (outcome.kind === "duplicate") {
-        log.debug({ messageId: outcome.messageId }, "deduped message");
+        if (outcome.kind === "duplicate") {
+          log.debug({ messageId: outcome.messageId }, "deduped message");
+          for (const media of outcome.mediaToDownload) {
+            await enqueueMediaDownload(deps, {
+              workspaceId,
+              messageId: outcome.messageId,
+              media,
+              phoneInstanceId,
+            });
+          }
+          continue;
+        }
+
+        if (outcome.kind === "revoked") {
+          await deps.realtime.publish({
+            type: "message.updated",
+            workspaceId,
+            channelId: outcome.channelId,
+            payload: {
+              messageId: outcome.targetMessageId,
+              status: "deleted_on_whatsapp",
+            },
+          });
+          continue;
+        }
+
+        if (outcome.kind === "group_metadata") {
+          await deps.realtime.publish({
+            type: "channel.updated",
+            workspaceId,
+            channelId: outcome.channelId,
+            payload: { reason: "group_metadata_changed" },
+          });
+          continue;
+        }
+
+        // Notify connected agents in real time (permission-scoped downstream).
+        await deps.realtime.publish({
+          type: "message.received",
+          workspaceId,
+          channelId: outcome.channelId,
+          payload: {
+            messageId: outcome.messageId,
+            isBackfill: outcome.classification.isBackfill,
+          },
+        });
+
         for (const media of outcome.mediaToDownload) {
           await enqueueMediaDownload(deps, {
             workspaceId,
@@ -85,52 +130,7 @@ export function makeNormalizeProcessor(deps: WorkerDeps) {
             phoneInstanceId,
           });
         }
-        continue;
       }
-
-      if (outcome.kind === "revoked") {
-        await deps.realtime.publish({
-          type: "message.updated",
-          workspaceId,
-          channelId: outcome.channelId,
-          payload: {
-            messageId: outcome.targetMessageId,
-            status: "deleted_on_whatsapp",
-          },
-        });
-        continue;
-      }
-
-      if (outcome.kind === "group_metadata") {
-        await deps.realtime.publish({
-          type: "channel.updated",
-          workspaceId,
-          channelId: outcome.channelId,
-          payload: { reason: "group_metadata_changed" },
-        });
-        continue;
-      }
-
-      // Notify connected agents in real time (permission-scoped downstream).
-      await deps.realtime.publish({
-        type: "message.received",
-        workspaceId,
-        channelId: outcome.channelId,
-        payload: {
-          messageId: outcome.messageId,
-          isBackfill: outcome.classification.isBackfill,
-        },
-      });
-
-      for (const media of outcome.mediaToDownload) {
-        await enqueueMediaDownload(deps, {
-          workspaceId,
-          messageId: outcome.messageId,
-          media,
-          phoneInstanceId,
-        });
-      }
-    }
     } catch (err) {
       log.error({ err: String(err) }, "normalization batch failed");
       throw err; // let BullMQ retry (configure attempts on enqueue)
