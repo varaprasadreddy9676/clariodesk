@@ -25,9 +25,10 @@ See the [Quick Start](README.md#-quick-start) in the README. All you need is Nod
 git clone https://github.com/varaprasadreddy9676/clariodesk.git
 cd clariodesk
 npm install
-npm run dev:infra
-cp .env.example .env
+npm run dev:infra          # starts Postgres, Redis, MinIO via Docker
+cp .env.example .env       # defaults work for local dev
 npm run db:migrate
+npm run dev                # starts api, worker, realtime, scheduler, web
 ```
 
 ## Workflow

@@ -6,6 +6,7 @@
   "main": "./dist/main.js",
   "scripts": {
     "build": "tsc --build",
+    "dev": "tsc --build && concurrently --kill-others \"tsc --build --watch --preserveWatchOutput\" \"node --watch --env-file=../../.env dist/main.js\"",
     "start": "node dist/main.js"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "@clariodesk/storage": "*",
     "@clariodesk/types": "*",
     "@fastify/helmet": "^13.0.2",
+    "@fastify/static": "^9.1.3",
     "@fastify/swagger": "^8.15.0",
     "@fastify/swagger-ui": "^4.2.0",
     "@nestjs/common": "^11.1.27",

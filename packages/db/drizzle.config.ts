@@ -1,4 +1,9 @@
+import { config } from "dotenv";
 import { defineConfig } from "drizzle-kit";
+
+// Load root .env so DATABASE_URL is available when running from the monorepo
+config({ path: "../../.env" });
+config(); // also try cwd .env as fallback
 
 export default defineConfig({
   // Point at compiled output: drizzle-kit's loader resolves the NodeNext `.js`

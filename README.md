@@ -83,28 +83,29 @@ Most teams managing WhatsApp at scale face the same problem: chats scattered acr
 git clone https://github.com/varaprasadreddy9676/clariodesk.git
 cd clariodesk
 
-# 1. Start infrastructure (Postgres, Redis, MinIO)
-npm run dev:infra
-
-# 2. Install dependencies
+# 1. Install dependencies
 npm install
 
-# 3. Configure environment
+# 2. Start infrastructure (Postgres, Redis, MinIO)
+npm run dev:infra
+
+# 3. Configure environment — defaults work out of the box for local dev
 cp .env.example .env
-# Edit .env — defaults work for local dev
 
 # 4. Run database migrations
 npm run db:migrate
 
-# 5. Start all services (4 terminals or use a process manager)
-npm run -w @clariodesk/gateway start    # WhatsApp bridge  :2786
-npm run -w @clariodesk/api start        # REST API         :4000
-npm run -w @clariodesk/realtime start   # WebSocket relay  :4001
-npm run -w @clariodesk/worker start     # Background jobs
-npm run -w @clariodesk/web dev          # Frontend         :5173
+# 5. Start everything in one terminal
+npm run dev
 ```
 
-Open `http://localhost:5173` → Register your workspace → Add a phone → Scan QR → Start chatting.
+That's it. Open `http://localhost:5173` → Register your workspace → Add a phone → Scan QR → start chatting.
+
+> **Note:** `npm run dev` starts the API (:4000), worker, realtime (:4001), scheduler, and frontend (:5173).
+> The WhatsApp gateway runs separately since it needs Chromium and a phone to link:
+> ```bash
+> npm run dev -w @clariodesk/gateway   # starts the WhatsApp bridge on :2786
+> ```
 
 ---
 
