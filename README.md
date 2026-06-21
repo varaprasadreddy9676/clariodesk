@@ -1,90 +1,301 @@
-# Clariodesk
+<div align="center">
+  <h1>ClarioDesk</h1>
+  <p><strong>The open-source WhatsApp team inbox.</strong><br/>
+  Reply as a team, track conversations, and close tickets — directly from WhatsApp.</p>
 
-Open-source, self-hostable **WhatsApp group operations platform** — turns chaotic
-WhatsApp group communication into a structured shared inbox, safe replies, and
-lightweight ticketing.
+  <a href="https://github.com/varaprasadreddy9676/clariodesk/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0 License" />
+  </a>
+  <a href="https://github.com/varaprasadreddy9676/clariodesk/actions/workflows/ci.yml">
+    <img src="https://github.com/varaprasadreddy9676/clariodesk/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  </a>
+  <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node 20+" />
+  <img src="https://img.shields.io/badge/self--hosted-yes-green" alt="Self-hosted" />
 
-> Status: **Core v1 backend foundation is verified; frontend is API-backed, realtime-enabled, and being hardened around the first-party Clario Gateway.** See
-> [`PROGRESS.md`](./PROGRESS.md) for the live, full-product checklist (done /
-> pending / deferred across all priorities). Functional + technical specs live in
-> the two `whatsapp_group_operations_platform_*.md` documents.
+  <br/><br/>
 
-## What works today
+  <p>
+    <a href="#-features">Features</a> ·
+    <a href="#-quick-start">Quick Start</a> ·
+    <a href="#-self-hosting">Self-Hosting</a> ·
+    <a href="#-architecture">Architecture</a> ·
+    <a href="#-contributing">Contributing</a>
+  </p>
+</div>
 
-The safety-critical backend loop is built and tested:
+---
 
-- **First-party Clario Gateway path** for linked-device QR, status, group sync,
-  recent message import, media download/send primitives, and text/reply send.
-  OpenWA/Evolution experiments proved why Core v1 must not depend on external
-  gateway behavior for message history.
-- **Policy engine (P0 safety core):** backfill/stale-vs-live classification,
-  idempotency + outbound-echo reconciliation, and the outbound send gate
-  (route/cooldown/cost/bulk-risk).
-- **Worker pipeline:** normalize → dedupe → classify → store → fan out media,
-  plus live/backfill media download and policy-gated outbox send.
-- **NestJS API server:** auth, clients/projects, phones, channel mapping,
-  messages, outbox, notes, tickets, contacts, media, search, and ops summary.
-- **Realtime server:** Socket.io with JWT handshake and permission-scoped rooms.
-- **Scheduler:** retention purge and phone health degradation checks.
-- **Full Drizzle schema** (24 tables, workspace-scoped) with a generated SQL
-  migration.
-- **Object storage** wrapper with opaque media keys (never leak filenames) and
-  short-lived signed URLs.
-- **Frontend foundation:** Vite React `apps/web` workbench with real auth, ops,
-  phones, synced channels, timeline, composer, tickets, search, clients, team,
-  reports, and settings API wiring.
+## Why ClarioDesk?
 
-Remaining Core v1 work is mainly production hardening, OpenAPI/operations docs,
-and broader E2E/failure coverage.
+Most teams managing WhatsApp at scale face the same problem: chats scattered across personal phones, no visibility into who's replying, no history, no accountability. Commercial tools like Periskope, WATI, or Respond.io solve this — but cost **$50–300/month per workspace** and keep your customer conversations on someone else's servers.
 
-## Architecture
+**ClarioDesk is the self-hosted alternative.** Run it on your own infrastructure, pay nothing per seat, and own every message.
 
-A **modular monolith** (TDD §3): one codebase, multiple runtime entrypoints
-(`api`, `worker`, `realtime`, `scheduler`) sharing the same domain packages.
-Transport is replaceable; operations logic is stable.
+| | ClarioDesk | Periskope | WATI | Respond.io |
+|---|---|---|---|---|
+| Price | **Free** | $50–200/mo | $49+/mo | $79+/mo |
+| Self-hosted | **Yes** | No | No | No |
+| Your data | **Your servers** | Their cloud | Their cloud | Their cloud |
+| Open source | **AGPL-3.0** | Closed | Closed | Closed |
+| WhatsApp groups | **Yes** | Limited | No | No |
+
+---
+
+## ✨ Features
+
+**Team inbox**
+- Shared inbox across all WhatsApp chats — groups and 1:1
+- See who's typing, who's assigned, and what's been replied
+- Real-time sync across all team members via WebSocket
+
+**WhatsApp-native UI**
+- Looks and feels like WhatsApp Web — familiar to your whole team
+- Dark mode, mobile-responsive, long-press context menus on mobile
+- Attachment preview, download, emoji reactions
+
+**Collaboration**
+- Assign chats to team members
+- Internal notes (not sent to the customer)
+- Private replies visible only to agents
+
+**Ticketing**
+- Convert any message into a ticket
+- Track open/closed tickets per conversation
+- Link chats to clients and projects
+
+**Safety**
+- Cooldown + bulk-send rate limiting so you never get banned
+- Policy engine blocks duplicate sends and echo loops
+- All API keys and phone session data encrypted at rest (AES-256-GCM)
+
+**Self-hosting**
+- Single `docker compose up` deployment
+- PostgreSQL + Redis + MinIO — no managed cloud services required
+- Bring your own WhatsApp linked device (no extra fees)
+
+---
+
+## 🚀 Quick Start
+
+**Prerequisites:** Node 20+, Docker, a WhatsApp account to link.
+
+```bash
+git clone https://github.com/varaprasadreddy9676/clariodesk.git
+cd clariodesk
+
+# 1. Start infrastructure (Postgres, Redis, MinIO)
+npm run dev:infra
+
+# 2. Install dependencies
+npm install
+
+# 3. Configure environment
+cp .env.example .env
+# Edit .env — defaults work for local dev
+
+# 4. Run database migrations
+npm run db:migrate
+
+# 5. Start all services (4 terminals or use a process manager)
+npm run -w @clariodesk/gateway start    # WhatsApp bridge  :2786
+npm run -w @clariodesk/api start        # REST API         :4000
+npm run -w @clariodesk/realtime start   # WebSocket relay  :4001
+npm run -w @clariodesk/worker start     # Background jobs
+npm run -w @clariodesk/web dev          # Frontend         :5173
+```
+
+Open `http://localhost:5173` → Register your workspace → Add a phone → Scan QR → Start chatting.
+
+---
+
+## 🐳 Self-Hosting
+
+Production deployment uses a single Docker Compose file with all services, health checks, restart policies, and resource limits pre-configured.
+
+```bash
+# 1. Copy and fill in your secrets
+cp deploy/.env.prod.example deploy/.env
+
+# 2. Set required secrets in deploy/.env
+JWT_SECRET=$(openssl rand -base64 48)
+ENCRYPTION_KEY=$(openssl rand -base64 32)
+GATEWAY_WEBHOOK_SECRET=$(openssl rand -base64 32)
+CLARIO_GATEWAY_API_KEY=$(openssl rand -base64 32)
+POSTGRES_PASSWORD=<strong password>
+MINIO_USER=clariodesk
+MINIO_PASSWORD=<strong password>
+CORS_ORIGINS=https://your-domain.com
+
+# 3. Deploy
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
+
+# 4. Run migrations (first deploy only)
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env \
+  run --rm migrate
+```
+
+Put an nginx/Caddy reverse proxy in front of ports `4000` (API) and `5173` (web).
+
+**Minimum server specs:** 2 vCPU, 4 GB RAM (Puppeteer/Chromium for WhatsApp requires ~1.5 GB).
+
+### Upgrade
+
+```bash
+git pull
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env pull
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
+```
+
+Migrations run automatically on every deploy via the `migrate` init service.
+
+---
+
+## 🏗 Architecture
+
+ClarioDesk is a **modular monolith** — one codebase, multiple runtime entrypoints sharing the same domain packages. The transport layer (WhatsApp gateway) is swappable; the operations logic is stable.
 
 ```
+┌─────────────────────────────────────────────────────────────────┐
+│  Browser (apps/web — React + Vite)                              │
+│  WhatsApp-style inbox UI, real-time updates, mobile-responsive  │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ REST + WebSocket
+┌───────────┐   ┌────────▼───────┐   ┌─────────────────────────┐
+│  gateway  │──▶│  api (NestJS)  │──▶│  worker (BullMQ)        │
+│ whatsapp- │   │  :4000         │   │  normalize / media /    │
+│ web.js    │   │                │   │  outbox-send processors │
+│ :2786     │◀──│  realtime      │   └─────────────────────────┘
+└───────────┘   │  socket.io     │
+                │  :4001         │   ┌─────────────────────────┐
+                │                │──▶│  scheduler              │
+                └────────────────┘   │  retention / health     │
+                         │           └─────────────────────────┘
+              ┌──────────▼──────────────────┐
+              │  PostgreSQL │ Redis │ MinIO  │
+              └─────────────────────────────┘
+
 packages/
-  config         env parsing + fail-fast validation
-  logger         pino structured logging
-  types          canonical domain enums + NormalizedGatewayEvent
-  schemas        zod request schemas
-  db             Drizzle schema + client (24 tables)
-  gateway-adapters  WhatsAppGatewayAdapter + Clario Gateway runtime adapter
-  policy-engine  classification / idempotency / echo / send policy  (P0 safety)
-  storage        S3/MinIO wrapper + key builders
-apps/
-  gateway        first-party linked-device QR/group/message bridge
-  worker         BullMQ ingestion/media/outbox runtime
-  api            NestJS + Fastify API
-  realtime       Socket.io realtime relay
-  scheduler      retention + phone health jobs
-  web            Vite React frontend foundation
+  config          env parsing + fail-fast production validation
+  logger          structured pino logging
+  types           canonical domain types + NormalizedGatewayEvent
+  schemas         zod request schemas
+  db              Drizzle ORM schema (24 tables, workspace-scoped)
+  gateway-adapters  WhatsAppGatewayAdapter interface + runtime adapters
+  policy-engine   send policy: cooldown / bulk-risk / idempotency
+  crypto          AES-256-GCM field encryption
+  storage         S3/MinIO object wrapper with signed URL generation
 ```
 
-## Develop
+**Key design decisions:**
+- **AGPL-3.0** — keeps derivatives open-source; commercial use requires a separate license
+- **Workspace-scoped schema** — multi-tenant from day one; each org is a row, not a schema
+- **Policy engine as a package** — safety rules are tested independently of the HTTP layer
+- **Atomic outbox claim** — `UPDATE WHERE status IN ('pending') RETURNING *` prevents double-send even with multiple worker processes
 
-Requires Node 20+, npm, Docker.
+---
+
+## 🔒 Security
+
+ClarioDesk is designed for production use by teams handling sensitive customer conversations.
+
+- **Auth:** JWT (HS256, configurable expiry), bcrypt-12 password hashing
+- **Encryption at rest:** AES-256-GCM for phone API keys and session secrets
+- **Webhook auth:** timing-safe secret comparison (`timingSafeEqual`)
+- **Rate limiting:** 10 requests/60s on auth endpoints
+- **CORS:** explicit allowlist required in production
+- **CSP:** `Content-Security-Policy` via `@fastify/helmet`
+- **Media:** short-lived signed URLs (5 min TTL), never public
+
+To report a security vulnerability, see [`SECURITY.md`](./SECURITY.md).
+
+---
+
+## 🛠 Development
 
 ```bash
 npm install
-npm run dev:infra          # postgres + redis + minio
 
-npm run build              # backend type build + web production build
-npm run db:generate        # regenerate SQL migration from schema
-npm run db:migrate         # apply migrations (needs infra up + .env)
+# Type check everything
+npx tsc --build --pretty
 
-npx tsc --build            # typecheck everything
-npx vitest run             # run the unit test suite
-npm run test:integration   # Testcontainers integration suite
+# Unit tests
+npx vitest run
 
-# first-party linked-device gateway
-CLARIO_GATEWAY_PORT=2786 CLARIO_GATEWAY_API_KEY=dev-clario-gateway-key \
-  npm run -w @clariodesk/gateway start
+# Integration tests (requires Docker)
+npm run test:integration
+
+# Format
+npm run format
+
+# Lint
+npm run lint
 ```
 
-Copy `.env.example` to `.env` and adjust before running migrations or apps.
+### Project structure
+
+```
+apps/
+  api/         NestJS + Fastify REST API
+  gateway/     WhatsApp linked-device bridge (whatsapp-web.js)
+  realtime/    Socket.IO WebSocket relay
+  worker/      BullMQ job processors
+  scheduler/   Periodic health + retention jobs
+  web/         React + Vite frontend
+packages/
+  config/      Zod env schema with production guards
+  crypto/      AES-256-GCM encryption primitives
+  db/          Drizzle ORM schema + migration runner
+  events/      Typed Redis pub/sub event bus
+  gateway-adapters/  WhatsApp adapter interface
+  logger/      Pino logger factory
+  policy-engine/   Send safety rules
+  schemas/     Shared Zod request schemas
+  storage/     S3/MinIO client
+  types/       Shared TypeScript types
+```
+
+### Database migrations
+
+```bash
+# After editing packages/db/src/schema/
+npm run db:generate   # create new migration SQL
+npm run db:migrate    # apply to running Postgres
+```
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions of all kinds — bug fixes, features, docs, and translations.
+
+See **[CONTRIBUTING.md](./CONTRIBUTING.md)** for the full guide.
+
+**Quick flow:**
+1. Fork the repo and create a branch from `main`
+2. Make your changes with tests
+3. Run `npx tsc --build` and `npx vitest run` — both must pass
+4. Open a PR with a clear description
+
+For large features, open an issue first so we can align on approach.
+
+---
+
+## Roadmap
+
+- [ ] Webhook-based WhatsApp Cloud API adapter (no Puppeteer required)
+- [ ] Broadcast / campaign sending with opt-out tracking
+- [ ] AI-powered auto-reply suggestions
+- [ ] Zapier / n8n integration
+- [ ] Mobile app (React Native)
+- [ ] Multi-language support
+
+Vote on issues or open new ones to shape the roadmap.
+
+---
 
 ## License
 
-AGPL-3.0-only (self-hosted OSS core).
+**AGPL-3.0-only** — free to self-host and modify. Derivatives must remain open source.  
+Commercial use (SaaS, white-label, embedding) requires a separate commercial license — open an issue to discuss.
+
+Copyright © 2026 ClarioDesk contributors.

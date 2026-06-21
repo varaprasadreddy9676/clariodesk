@@ -22,3 +22,22 @@ pgdata/
 # Test/E2E artifacts
 test-results/
 playwright-report/
+
+# Production env files — never commit these
+deploy/.env
+deploy/.env.prod
+*.pem
+*.key
+*.crt
+
+# Playwright CLI state
+.playwright-cli/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
