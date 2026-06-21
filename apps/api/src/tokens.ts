@@ -1,0 +1,10 @@
+/** DI injection tokens for the shared infrastructure singletons. */
+export const TOKENS = {
+  CONFIG: "CLARIODESK_CONFIG",
+  DB: "CLARIODESK_DB",
+  STORAGE: "CLARIODESK_STORAGE",
+  QUEUES: "CLARIODESK_QUEUES",
+  ADAPTERS: "CLARIODESK_ADAPTERS",
+  LOGGER: "CLARIODESK_LOGGER",
+  REALTIME: "CLARIODESK_REALTIME",
+} as const;

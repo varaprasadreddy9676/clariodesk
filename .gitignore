@@ -1,0 +1,24 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+coverage/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.turbo/
+.vitest/
+data/
+minio-data/
+pgdata/
+
+# Runtime WhatsApp session/auth data — never commit (contains live credentials)
+.clario-gateway/
+.wwebjs_cache/
+.wwebjs_auth/
+
+# Test/E2E artifacts
+test-results/
+playwright-report/

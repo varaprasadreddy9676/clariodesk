@@ -1,0 +1,2 @@
+CREATE INDEX "messages_body_fts_idx" ON "messages" USING gin (to_tsvector('simple', coalesce("body", '')));--> statement-breakpoint
+CREATE INDEX "tickets_fts_idx" ON "tickets" USING gin (to_tsvector('simple', coalesce("title", '') || ' ' || coalesce("description", '')));

@@ -1,0 +1,69 @@
+# Local development infrastructure for Clariodesk Core v1.
+# App processes (api/worker/web) run on the host against these services.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: clariodesk
+      POSTGRES_PASSWORD: clariodesk
+      POSTGRES_DB: clariodesk
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clariodesk"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: clariodesk
+      MINIO_ROOT_PASSWORD: clariodesk-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Creates the required buckets on startup, then exits.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 clariodesk clariodesk-secret; do sleep 1; done;
+      mc mb --ignore-existing local/clariodesk-media;
+      mc mb --ignore-existing local/clariodesk-raw-events;
+      mc anonymous set none local/clariodesk-media;
+      mc anonymous set none local/clariodesk-raw-events;
+      echo 'buckets ready';
+      "
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

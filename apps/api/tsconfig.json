@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../packages/config" },
+    { "path": "../../packages/crypto" },
+    { "path": "../../packages/db" },
+    { "path": "../../packages/events" },
+    { "path": "../../packages/gateway-adapters" },
+    { "path": "../../packages/logger" },
+    { "path": "../../packages/policy-engine" },
+    { "path": "../../packages/schemas" },
+    { "path": "../../packages/storage" },
+    { "path": "../../packages/types" }
+  ]
+}

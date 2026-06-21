@@ -1,0 +1,24 @@
+{
+  "name": "@clariodesk/realtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc --build",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@clariodesk/config": "*",
+    "@clariodesk/db": "*",
+    "@clariodesk/events": "*",
+    "@clariodesk/logger": "*",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.38.2",
+    "jsonwebtoken": "^9.0.2",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.7"
+  }
+}
