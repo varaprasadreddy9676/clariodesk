@@ -12,10 +12,8 @@ export function useAsyncData<T>(load: () => Promise<T>, deps: unknown[]) {
     error: null,
   });
 
-  const refresh = useCallback(async () => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    return load();
-  }, deps); // eslint-disable-line react-hooks/exhaustive-deps
+  // deps is intentionally dynamic — callers pass a stable array
+  const refresh = useCallback(async () => load(), deps);
 
   useEffect(() => {
     let current = true;
@@ -50,7 +48,7 @@ export function useAsyncData<T>(load: () => Promise<T>, deps: unknown[]) {
         error: err instanceof Error ? err.message : "Request failed",
       }));
     }
-  }, deps); // eslint-disable-line react-hooks/exhaustive-deps
+  }, deps);
 
   return { ...state, refresh: refreshGuarded };
 }
