@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { Inject, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { schema, type Database } from "@clariodesk/db";
 import type { AppConfig } from "@clariodesk/config";
@@ -48,11 +53,16 @@ export class MessagesService {
         messageType: schema.messages.messageType,
         direction: schema.messages.direction,
         sentByType: schema.messages.sentByType,
+        senderName: schema.contacts.canonicalName,
         providerTimestamp: schema.messages.providerTimestamp,
         isBackfill: schema.messages.isBackfill,
         status: schema.messages.status,
       })
       .from(schema.messages)
+      .leftJoin(
+        schema.contacts,
+        eq(schema.contacts.id, schema.messages.senderContactId),
+      )
       .where(
         cursor
           ? and(
@@ -102,6 +112,7 @@ export class MessagesService {
         messageType: "text" as const,
         direction: "note" as const,
         sentByType: "dashboard_agent" as const,
+        senderName: null,
         providerTimestamp: note.providerTimestamp,
         isBackfill: false,
         status: "received" as const,
@@ -131,6 +142,7 @@ export class MessagesService {
       : [];
     const mediaByMessage = new Map<string, typeof mediaRows>();
     for (const media of mediaRows) {
+      if (!media.messageId) continue;
       const items = mediaByMessage.get(media.messageId) ?? [];
       items.push(media);
       mediaByMessage.set(media.messageId, items);
@@ -175,6 +187,53 @@ export class MessagesService {
       payload: { noteId: note?.id },
     });
     return note;
+  }
+
+  async react(user: AuthUser, messageId: string, reaction: string) {
+    const [row] = await this.db
+      .select({
+        channelId: schema.messages.channelId,
+        providerMessageId: schema.messages.providerMessageId,
+        providerChatId: schema.messages.providerChatId,
+        phoneInstanceId: schema.messages.phoneInstanceId,
+        adapterType: schema.phoneInstances.adapterType,
+        providerInstanceId: schema.phoneInstances.providerInstanceId,
+        gatewayBaseUrl: schema.phoneInstances.gatewayBaseUrl,
+        encryptedApiKey: schema.phoneInstances.encryptedApiKey,
+      })
+      .from(schema.messages)
+      .innerJoin(
+        schema.phoneInstances,
+        eq(schema.phoneInstances.id, schema.messages.phoneInstanceId),
+      )
+      .where(
+        and(
+          eq(schema.messages.id, messageId),
+          eq(schema.messages.workspaceId, user.workspaceId),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new NotFoundException("Message not found");
+    await this.access.assertChannelAccess(user, row.channelId);
+    const adapter = this.adapters.forPhone(row);
+    if (!adapter.reactToMessage) {
+      throw new BadRequestException("Gateway does not support reactions");
+    }
+    await adapter.reactToMessage({
+      providerInstanceId: row.providerInstanceId ?? row.phoneInstanceId,
+      providerChatId: row.providerChatId,
+      providerMessageId: row.providerMessageId,
+      reaction,
+    });
+    await this.audit.record({
+      workspaceId: user.workspaceId,
+      actorUserId: user.userId,
+      action: "message.reacted",
+      targetType: "message",
+      targetId: messageId,
+      metadata: { reaction },
+    });
+    return { ok: true as const };
   }
 
   /**

@@ -30,14 +30,33 @@ type WWebMessage = {
     data?: string;
   } | null>;
   reply?: (body: string) => Promise<WWebMessage>;
+  react?: (reaction: string) => Promise<void>;
 };
 
 type WWebChat = {
   id?: { _serialized?: string };
   name?: string;
   isGroup?: boolean;
+  pinned?: boolean;
+  isMuted?: boolean;
+  archived?: boolean;
   participants?: unknown[];
+  getContact?: () => Promise<WWebContact>;
   fetchMessages: (opts: { limit: number }) => Promise<WWebMessage[]>;
+  pin?: () => Promise<boolean>;
+  unpin?: () => Promise<boolean>;
+  mute?: () => Promise<unknown>;
+  unmute?: () => Promise<unknown>;
+  archive?: () => Promise<void>;
+  unarchive?: () => Promise<void>;
+  markUnread?: () => Promise<void>;
+};
+
+type WWebContact = {
+  name?: string;
+  pushname?: string;
+  shortName?: string;
+  getFormattedNumber?: () => Promise<string>;
 };
 
 type WWebClient = InstanceType<typeof Client> & {
@@ -46,7 +65,18 @@ type WWebClient = InstanceType<typeof Client> & {
     evaluate: <T>(fn: () => T | Promise<T>) => Promise<T>;
   };
   getChats: () => Promise<WWebChat[]>;
+  getProfilePicUrl: (contactId: string) => Promise<string | undefined>;
   getChatById: (id: string) => Promise<WWebChat>;
+  getMessageById: (id: string) => Promise<WWebMessage | null>;
+  getNumberId: (
+    phoneNumber: string,
+  ) => Promise<{ _serialized?: string } | null>;
+  createGroup: (
+    title: string,
+    participantIds: string[],
+  ) => Promise<
+    string | { gid?: string | { _serialized?: string }; id?: string }
+  >;
   sendMessage: (
     chatId: string,
     content: string | unknown,
@@ -78,8 +108,22 @@ export type GatewayMessage = {
 export type GatewayGroup = {
   id: string;
   name: string | null;
+  avatarUrl?: string | null;
   participantsCount?: number;
 };
+
+export type GatewayChatState = GatewayGroup & {
+  channelType: "group" | "direct";
+  isPinned: boolean;
+  isMuted: boolean;
+  isArchived: boolean;
+};
+
+export type ChatStateAction =
+  | { action: "mark_unread"; markedUnread: true }
+  | { action: "pin"; pinned: boolean }
+  | { action: "mute"; muted: boolean }
+  | { action: "archive"; archived: boolean };
 
 export class GatewaySession extends EventEmitter {
   readonly id: string;
@@ -216,15 +260,42 @@ export class GatewaySession extends EventEmitter {
   > {
     const client = this.requireClient();
     const chats = (await client.getChats()) as unknown as WWebChat[];
-    return chats
-      .map((chat) => ({
-        id: chat.id?._serialized ?? "",
-        name: chat.name ?? null,
-        participantsCount: (chat as { participants?: unknown[] }).participants
-          ?.length,
-        channelType: chat.isGroup ? ("group" as const) : ("direct" as const),
-      }))
-      .filter((chat) => chat.id);
+    const supportedChats = chats.filter((chat) => {
+      const id = chat.id?._serialized ?? "";
+      return (
+        id.endsWith("@g.us") || id.endsWith("@c.us") || id.endsWith("@lid")
+      );
+    });
+    return mapWithConcurrency(supportedChats, 12, async (chat) => {
+      const id = chat.id?._serialized ?? "";
+      const channelType = chat.isGroup
+        ? ("group" as const)
+        : ("direct" as const);
+      let name = chat.name?.trim() || null;
+      if (!name && channelType === "direct" && chat.getContact) {
+        try {
+          const contact = await chat.getContact();
+          name =
+            contact.name?.trim() ||
+            contact.pushname?.trim() ||
+            contact.shortName?.trim() ||
+            (await contact.getFormattedNumber?.())?.trim() ||
+            null;
+        } catch {
+          // Contact metadata can be unavailable for privacy or deleted users.
+        }
+      }
+      const avatarUrl = id
+        ? await client.getProfilePicUrl(id).catch(() => undefined)
+        : undefined;
+      return {
+        id,
+        name,
+        avatarUrl: avatarUrl ?? null,
+        participantsCount: chat.participants?.length,
+        channelType,
+      };
+    }).then((items) => items.filter((chat) => chat.id));
   }
 
   async groups(): Promise<GatewayGroup[]> {
@@ -233,8 +304,76 @@ export class GatewaySession extends EventEmitter {
       .map((chat) => ({
         id: chat.id,
         name: chat.name,
+        avatarUrl: chat.avatarUrl,
         participantsCount: chat.participantsCount,
       }));
+  }
+
+  async chat(chatId: string): Promise<GatewayChatState> {
+    const client = this.requireClient();
+    const chat = (await client.getChatById(chatId)) as unknown as WWebChat;
+    const id = chat.id?._serialized ?? chatId;
+    const channelType = chat.isGroup ? ("group" as const) : ("direct" as const);
+    let name = chat.name?.trim() || null;
+    if (!name && channelType === "direct" && chat.getContact) {
+      try {
+        const contact = await chat.getContact();
+        name =
+          contact.name?.trim() ||
+          contact.pushname?.trim() ||
+          contact.shortName?.trim() ||
+          (await contact.getFormattedNumber?.())?.trim() ||
+          null;
+      } catch {
+        // WhatsApp may withhold contact metadata because of privacy settings.
+      }
+    }
+    const avatarUrl = await client
+      .getProfilePicUrl(id)
+      .catch(() => undefined);
+    return {
+      id,
+      name,
+      avatarUrl: avatarUrl ?? null,
+      participantsCount: chat.participants?.length,
+      channelType,
+      isPinned: Boolean(chat.pinned),
+      isMuted: Boolean(chat.isMuted),
+      isArchived: Boolean(chat.archived),
+    };
+  }
+
+  async setChatState(
+    chatId: string,
+    action: ChatStateAction,
+  ): Promise<GatewayChatState> {
+    const chat = (await this.requireClient().getChatById(
+      chatId,
+    )) as unknown as WWebChat;
+    const operation = async () => {
+      switch (action.action) {
+        case "pin":
+          if (Boolean(chat.pinned) === action.pinned) break;
+          await requireChatMethod(chat, action.pinned ? "pin" : "unpin")();
+          break;
+        case "mute":
+          if (Boolean(chat.isMuted) === action.muted) break;
+          await requireChatMethod(chat, action.muted ? "mute" : "unmute")();
+          break;
+        case "archive":
+          if (Boolean(chat.archived) === action.archived) break;
+          await requireChatMethod(
+            chat,
+            action.archived ? "archive" : "unarchive",
+          )();
+          break;
+        case "mark_unread":
+          await requireChatMethod(chat, "markUnread")();
+          break;
+      }
+    };
+    await withTimeout(operation(), 20_000);
+    return this.chat(chatId);
   }
 
   async messages(chatId: string, limit: number): Promise<GatewayMessage[]> {
@@ -251,6 +390,48 @@ export class GatewaySession extends EventEmitter {
       body,
     )) as WWebMessage;
     return { messageId: normalizeMessage(message).id };
+  }
+
+  async resolveNumber(phoneNumber: string): Promise<{
+    registered: boolean;
+    providerContactId: string | null;
+  }> {
+    const normalized = phoneNumber.replace(/\D/g, "");
+    if (normalized.length < 7 || normalized.length > 15) {
+      throw new Error("Phone number must contain 7 to 15 digits");
+    }
+    const result = await this.requireClient().getNumberId(normalized);
+    const providerContactId = result?._serialized ?? null;
+    return {
+      registered: Boolean(providerContactId),
+      providerContactId,
+    };
+  }
+
+  async createGroup(
+    title: string,
+    participantIds: string[],
+  ): Promise<{ providerChatId: string }> {
+    if (!participantIds.length) {
+      throw new Error("At least one participant is required");
+    }
+    const result = await this.requireClient().createGroup(
+      title.trim(),
+      participantIds,
+    );
+    const groupResult = result as unknown as
+      | string
+      | { gid?: string | { _serialized?: string }; id?: string };
+    const providerChatId =
+      typeof groupResult === "string"
+        ? groupResult
+        : typeof groupResult.gid === "string"
+          ? groupResult.gid
+          : (groupResult.gid?._serialized ?? groupResult.id);
+    if (!providerChatId) {
+      throw new Error("WhatsApp did not return the created group id");
+    }
+    return { providerChatId };
   }
 
   async sendMedia(input: {
@@ -293,6 +474,13 @@ export class GatewaySession extends EventEmitter {
       throw new Error(`Message ${messageId} not found in ${chatId}`);
     const reply = (await target.reply(body)) as WWebMessage;
     return { messageId: normalizeMessage(reply).id };
+  }
+
+  async react(messageId: string, reaction: string): Promise<{ ok: true }> {
+    const message = await this.requireClient().getMessageById(messageId);
+    if (!message?.react) throw new Error(`Message ${messageId} not found`);
+    await message.react(reaction);
+    return { ok: true };
   }
 
   async downloadMedia(
@@ -360,6 +548,64 @@ export class GatewaySession extends EventEmitter {
   private setStatus(status: SessionStatus): void {
     this.status = status;
     this.emit("status", this.snapshot());
+  }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (cursor < items.length) {
+        const index = cursor;
+        cursor += 1;
+        results[index] = await mapper(items[index]!);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
+}
+
+type ChatOperationName =
+  | "pin"
+  | "unpin"
+  | "mute"
+  | "unmute"
+  | "archive"
+  | "unarchive"
+  | "markUnread";
+
+function requireChatMethod(
+  chat: WWebChat,
+  name: ChatOperationName,
+): () => Promise<unknown> {
+  const method = chat[name];
+  if (typeof method !== "function") {
+    throw new Error(`Connected WhatsApp session does not support ${name}`);
+  }
+  return method.bind(chat) as () => Promise<unknown>;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("WhatsApp did not confirm this change")),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 

@@ -18,6 +18,10 @@ export type GatewayCapabilities = {
   supportsMediaDownload: boolean;
   supportsMessageDeleteEvents: boolean;
   supportsOfficialTemplates: boolean;
+  supportsChatPin?: boolean;
+  supportsChatMute?: boolean;
+  supportsChatArchive?: boolean;
+  supportsMarkUnread?: boolean;
 };
 
 export type ConnectInput = { providerInstanceId: string };
@@ -59,6 +63,33 @@ export type GatewaySendResult = {
   providerMessageId: string;
 };
 
+export type ResolveNumberInput = {
+  providerInstanceId: string;
+  phoneNumber: string;
+};
+
+export type ResolveNumberResult = {
+  registered: boolean;
+  providerContactId: string | null;
+};
+
+export type CreateGroupInput = {
+  providerInstanceId: string;
+  title: string;
+  participantIds: string[];
+};
+
+export type CreateGroupResult = {
+  providerChatId: string;
+};
+
+export type ReactToMessageInput = {
+  providerInstanceId: string;
+  providerChatId: string;
+  providerMessageId: string;
+  reaction: string;
+};
+
 export type DownloadMediaInput = {
   providerInstanceId: string;
   providerMediaId: string;
@@ -86,9 +117,23 @@ export type RawGatewayWebhook = {
 export type GatewayChat = {
   providerChatId: string;
   title: string | null;
+  avatarUrl?: string | null;
   channelType: "group" | "direct" | "official_direct";
   participantCount?: number;
+  isPinned?: boolean;
+  isMuted?: boolean;
+  isArchived?: boolean;
 };
+
+export type SetChatStateInput = {
+  providerInstanceId: string;
+  providerChatId: string;
+} & (
+  | { action: "mark_unread"; markedUnread: true }
+  | { action: "pin"; pinned: boolean }
+  | { action: "mute"; muted: boolean }
+  | { action: "archive"; archived: boolean }
+);
 
 export type GatewayChatMessage = {
   providerMessageId: string;
@@ -123,6 +168,11 @@ export interface WhatsAppGatewayAdapter {
 
   /** List chats the connected number belongs to (sync, not webhook). */
   fetchChats?(input: { providerInstanceId: string }): Promise<GatewayChat[]>;
+  fetchChat?(input: {
+    providerInstanceId: string;
+    providerChatId: string;
+  }): Promise<GatewayChat>;
+  setChatState?(input: SetChatStateInput): Promise<GatewayChat>;
   /** Backward-compatible group-only discovery for gateways that cannot list all chats. */
   fetchGroups?(input: { providerInstanceId: string }): Promise<GatewayChat[]>;
   fetchMessages?(input: {
@@ -131,9 +181,13 @@ export interface WhatsAppGatewayAdapter {
     limit: number;
   }): Promise<GatewayChatMessage[]>;
 
+  resolveNumber?(input: ResolveNumberInput): Promise<ResolveNumberResult>;
+  createGroup?(input: CreateGroupInput): Promise<CreateGroupResult>;
+
   sendText(input: SendTextInput): Promise<GatewaySendResult>;
   sendMedia(input: SendMediaInput): Promise<GatewaySendResult>;
   downloadMedia(input: DownloadMediaInput): Promise<GatewayMediaResult>;
+  reactToMessage?(input: ReactToMessageInput): Promise<{ ok: true }>;
 
   /**
    * Pure transform from provider payload to the platform's normalized events.

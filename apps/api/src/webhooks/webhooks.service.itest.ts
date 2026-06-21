@@ -81,6 +81,7 @@ function makeService(options?: {
 async function seedPhone(status: PhoneStatus = "connected") {
   const workspaceId = randomUUID();
   const phoneInstanceId = randomUUID();
+  const providerInstanceId = `phone-${randomUUID()}`;
   await db.insert(schema.workspaces).values({
     id: workspaceId,
     name: "Workspace",
@@ -91,10 +92,10 @@ async function seedPhone(status: PhoneStatus = "connected") {
     workspaceId,
     adapterType: "clario_gateway",
     displayName: "Support Phone",
-    providerInstanceId: "phone-1",
+    providerInstanceId,
     status,
   });
-  return { workspaceId, phoneInstanceId };
+  return { workspaceId, phoneInstanceId, providerInstanceId };
 }
 
 describe("WebhooksService.ingest (integration)", () => {
@@ -140,11 +141,12 @@ describe("WebhooksService.ingest (integration)", () => {
   });
 
   it("resolves live gateway webhooks by provider session id", async () => {
-    const { phoneInstanceId } = await seedPhone("connected");
+    const { phoneInstanceId, providerInstanceId } =
+      await seedPhone("connected");
     const { service, queues } = makeService();
 
     await expect(
-      service.ingest("clario_gateway", "phone-1", {
+      service.ingest("clario_gateway", providerInstanceId, {
         event: "message.received",
         message: {
           id: "LIVE1",

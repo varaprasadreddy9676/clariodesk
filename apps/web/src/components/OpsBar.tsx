@@ -46,6 +46,7 @@ export function OpsBar({
   ];
   return (
     <section className="ops-bar" aria-label="Operational status">
+      <strong className="mobile-brand">ClarioDesk</strong>
       <div className="ops-metrics">
         {items.map((item) => {
           const Icon = item.icon;
@@ -72,11 +73,12 @@ export function OpsBar({
         <button
           type="button"
           className="ops-notification-button"
+          aria-label={`Notifications, ${notificationCount} unread`}
           onClick={onOpenNotifications}
         >
           <Bell size={15} aria-hidden="true" />
-          <span>Notifications</span>
-          <strong>{notificationCount}</strong>
+          <span aria-hidden="true">Notifications</span>
+          <strong aria-hidden="true">{notificationCount}</strong>
         </button>
         <span className={`realtime-pill realtime-${realtimeStatus}`}>
           <Wifi size={14} aria-hidden="true" />

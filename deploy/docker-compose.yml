@@ -1,29 +1,35 @@
-# Production-style stack: infra + all four Clariodesk runtimes.
-# Configure secrets via an .env file next to this compose file.
+# Production stack. Configure secrets via .env next to this file.
+# Required: JWT_SECRET, ENCRYPTION_KEY, GATEWAY_WEBHOOK_SECRET, CLARIO_GATEWAY_API_KEY
+# Recommended to override: POSTGRES_PASSWORD, MINIO_USER, MINIO_PASSWORD
+
 x-app-env: &app-env
   NODE_ENV: production
-  DATABASE_URL: postgres://clariodesk:${POSTGRES_PASSWORD:-clariodesk}@postgres:5432/clariodesk
+  DATABASE_URL: postgres://clariodesk:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/clariodesk
   REDIS_URL: redis://redis:6379
   S3_ENDPOINT: http://minio:9000
   S3_REGION: us-east-1
-  S3_ACCESS_KEY_ID: ${MINIO_USER:-clariodesk}
-  S3_SECRET_ACCESS_KEY: ${MINIO_PASSWORD:-clariodesk-secret}
+  S3_ACCESS_KEY_ID: ${MINIO_USER:?set MINIO_USER}
+  S3_SECRET_ACCESS_KEY: ${MINIO_PASSWORD:?set MINIO_PASSWORD}
   S3_BUCKET_MEDIA: clariodesk-media
   S3_BUCKET_RAW_EVENTS: clariodesk-raw-events
   S3_FORCE_PATH_STYLE: "true"
   JWT_SECRET: ${JWT_SECRET:?set a strong JWT_SECRET}
   ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY (openssl rand -base64 32)}
   GATEWAY_WEBHOOK_SECRET: ${GATEWAY_WEBHOOK_SECRET:?set a webhook secret}
-  CORS_ORIGINS: ${CORS_ORIGINS:-}
+  CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS to your frontend domain}
   CLARIO_GATEWAY_BASE_URL: http://gateway:2786
   CLARIO_GATEWAY_API_KEY: ${CLARIO_GATEWAY_API_KEY:?set CLARIO_GATEWAY_API_KEY}
+
+x-restart: &restart
+  restart: unless-stopped
 
 services:
   postgres:
     image: postgres:16-alpine
+    <<: *restart
     environment:
       POSTGRES_USER: clariodesk
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clariodesk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       POSTGRES_DB: clariodesk
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
@@ -31,24 +37,50 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
   redis:
     image: redis:7-alpine
+    <<: *restart
     command: ["redis-server", "--appendonly", "yes"]
     volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
   minio:
     image: minio/minio:latest
-    command: ["server", "/data", "--console-address", ":9001"]
+    <<: *restart
+    # No --console-address: MinIO admin UI disabled in production
+    command: ["server", "/data"]
     environment:
-      MINIO_ROOT_USER: ${MINIO_USER:-clariodesk}
-      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-clariodesk-secret}
+      MINIO_ROOT_USER: ${MINIO_USER:?set MINIO_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:?set MINIO_PASSWORD}
     volumes: [miniodata:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
   gateway:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+    <<: *restart
     environment:
       NODE_ENV: production
       CLARIO_GATEWAY_PORT: 2786
@@ -60,8 +92,17 @@ services:
     command: ["node", "apps/gateway/dist/index.js"]
     volumes: [gatewaydata:/data/clario-gateway]
     ports: ["2786:2786"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:2786/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    deploy:
+      resources:
+        limits:
+          memory: 2g
 
-  # Runs migrations once, then exits.
+  # Runs migrations once, then exits. All app services wait for this.
   migrate:
     build:
       context: ..
@@ -76,6 +117,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+    <<: *restart
     environment: *app-env
     command: ["node", "apps/api/dist/main.js"]
     ports: ["4000:4000"]
@@ -83,36 +125,81 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       minio:
-        condition: service_started
+        condition: service_healthy
       gateway:
-        condition: service_started
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
   worker:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+    <<: *restart
     environment: *app-env
     command: ["node", "apps/worker/dist/index.js"]
-    depends_on: [postgres, redis, minio, gateway]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
   realtime:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+    <<: *restart
     environment: *app-env
     command: ["node", "apps/realtime/dist/index.js"]
     ports: ["4001:4001"]
-    depends_on: [postgres, redis]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
   scheduler:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+    <<: *restart
     environment: *app-env
     command: ["node", "apps/scheduler/dist/index.js"]
-    depends_on: [postgres, redis, minio]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
 volumes:
   pgdata:

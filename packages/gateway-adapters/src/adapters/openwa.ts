@@ -40,6 +40,10 @@ const CAPABILITIES: GatewayCapabilities = {
   supportsMediaDownload: true,
   supportsMessageDeleteEvents: true,
   supportsOfficialTemplates: false,
+  supportsChatPin: false,
+  supportsChatMute: false,
+  supportsChatArchive: false,
+  supportsMarkUnread: false,
 };
 
 export class OpenWaAdapter implements WhatsAppGatewayAdapter {

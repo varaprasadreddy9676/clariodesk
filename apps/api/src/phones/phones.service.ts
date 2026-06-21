@@ -189,7 +189,13 @@ export class PhonesService {
             providerInstanceId: phone.providerInstanceId ?? phoneId,
           }),
         };
-    const mapped = STATUS_MAP[live.status] ?? "degraded";
+    const liveStatus = STATUS_MAP[live.status] ?? "degraded";
+    // A ready WhatsApp transport can still be importing initial history.
+    // Preserve that lifecycle state until the background import completes.
+    const mapped =
+      phone.status === "syncing" && liveStatus === "connected"
+        ? "syncing"
+        : liveStatus;
     await this.db
       .update(schema.phoneInstances)
       .set({
@@ -223,6 +229,7 @@ export class PhonesService {
           providerInstanceId: phone.providerInstanceId ?? phoneId,
         })) ?? []);
     const now = new Date();
+    const hasHistorySync = Boolean(adapter.fetchMessages && chats.length > 0);
 
     const result = await this.db.transaction(async (tx) => {
       let created = 0;
@@ -236,7 +243,10 @@ export class PhonesService {
           continue;
         seenProviderChatIds.add(providerChatId);
 
-        const title = chat.title?.trim() || null;
+        const title =
+          chat.title?.trim() ||
+          fallbackChatTitle(providerChatId, chat.channelType);
+        const avatarUrl = chat.avatarUrl?.trim() || null;
         const [existing] = await tx
           .select({ id: schema.channels.id })
           .from(schema.channels)
@@ -255,6 +265,7 @@ export class PhonesService {
             .set({
               channelType: chat.channelType,
               ...(title ? { title, subject: title } : {}),
+              ...(avatarUrl ? { avatarUrl } : {}),
               updatedAt: now,
             })
             .where(eq(schema.channels.id, existing.id));
@@ -269,6 +280,7 @@ export class PhonesService {
           channelType: chat.channelType,
           title,
           subject: title,
+          avatarUrl,
           status: chat.channelType === "group" ? "unmapped" : "active",
         });
         created += 1;
@@ -313,7 +325,12 @@ export class PhonesService {
 
       await tx
         .update(schema.phoneInstances)
-        .set({ lastSeenAt: now, lastSyncAt: now, updatedAt: now })
+        .set({
+          lastSeenAt: now,
+          status: hasHistorySync ? "syncing" : "connected",
+          ...(hasHistorySync ? {} : { lastSyncAt: now }),
+          updatedAt: now,
+        })
         .where(eq(schema.phoneInstances.id, phoneId));
 
       return { total: seenProviderChatIds.size, created, updated, archived };
@@ -328,13 +345,17 @@ export class PhonesService {
       metadata: result,
     });
 
-    void this.syncRecentHistory({
-      workspaceId: user.workspaceId,
-      phoneInstanceId: phoneId,
-      providerInstanceId: phone.providerInstanceId ?? phoneId,
-      adapter,
-      chats,
-    }).catch(() => undefined);
+    if (hasHistorySync) {
+      void this.syncRecentHistory({
+        workspaceId: user.workspaceId,
+        phoneInstanceId: phoneId,
+        providerInstanceId: phone.providerInstanceId ?? phoneId,
+        adapter,
+        chats,
+      })
+        .then(() => this.finishHistorySync(phoneId, "connected"))
+        .catch(() => this.finishHistorySync(phoneId, "degraded"));
+    }
 
     return result;
   }
@@ -368,6 +389,7 @@ export class PhonesService {
         providerInstanceId: schema.phoneInstances.providerInstanceId,
         gatewayBaseUrl: schema.phoneInstances.gatewayBaseUrl,
         encryptedApiKey: schema.phoneInstances.encryptedApiKey,
+        status: schema.phoneInstances.status,
       })
       .from(schema.phoneInstances)
       .where(
@@ -420,6 +442,27 @@ export class PhonesService {
     }
   }
 
+  private async finishHistorySync(
+    phoneInstanceId: string,
+    status: "connected" | "degraded",
+  ): Promise<void> {
+    const now = new Date();
+    await this.db
+      .update(schema.phoneInstances)
+      .set({
+        status,
+        ...(status === "connected" ? { lastSyncAt: now } : {}),
+        lastSeenAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(schema.phoneInstances.id, phoneInstanceId),
+          eq(schema.phoneInstances.status, "syncing"),
+        ),
+      );
+  }
+
   private async enqueueHistoryBatch(
     input: {
       workspaceId: string;
@@ -443,6 +486,15 @@ export class PhonesService {
       },
     );
   }
+}
+
+function fallbackChatTitle(
+  providerChatId: string,
+  channelType: GatewayChat["channelType"],
+): string | null {
+  if (channelType !== "direct") return null;
+  const phone = providerChatId.split("@")[0]?.replace(/\D/g, "");
+  return phone ? `+${phone}` : null;
 }
 
 function toNormalizedHistoryEvent(

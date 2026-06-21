@@ -12,6 +12,7 @@ export type ChannelStatus =
   | "unmapped"
   | "mixed"
   | "muted"
+  | "archived"
   | "degraded";
 export type PhoneStatus = "connected" | "syncing" | "degraded" | "qr_required";
 export type MessageKind =
@@ -23,7 +24,9 @@ export type MessageKind =
 
 export type Channel = {
   id: string;
+  providerChatId: string;
   title: string;
+  avatarUrl?: string;
   channelType: "group" | "direct" | "official_direct";
   clientId?: string;
   client: string;
@@ -35,6 +38,9 @@ export type Channel = {
   lastMessage: string;
   lastTime: string;
   unread: number;
+  isPinned: boolean;
+  isMuted: boolean;
+  isMarkedUnread: boolean;
   openTickets: number;
   awaitingResponseSince?: string;
 };

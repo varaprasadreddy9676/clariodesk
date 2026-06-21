@@ -114,6 +114,16 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
         "ENCRYPTION_KEY must be set to a unique value in production (openssl rand -base64 32).",
       );
     }
+    if (parsed.data.CLARIO_GATEWAY_API_KEY === "dev-clario-gateway-key") {
+      throw new Error(
+        "CLARIO_GATEWAY_API_KEY must be set to a strong secret in production.",
+      );
+    }
+    if (!parsed.data.CORS_ORIGINS) {
+      throw new Error(
+        "CORS_ORIGINS must be set in production (comma-separated list of allowed frontend origins).",
+      );
+    }
   }
   cached = parsed.data;
   return cached;

@@ -12,6 +12,7 @@ import { closeDb, getDb, schema, type Database } from "@clariodesk/db";
 import type {
   GatewayCapabilities,
   GatewayChat,
+  GatewayChatMessage,
   WhatsAppGatewayAdapter,
 } from "@clariodesk/gateway-adapters";
 import type { AuthUser } from "../common/auth-context.js";
@@ -64,7 +65,7 @@ async function seedPhone() {
     workspaceId,
     adapterType: "clario_gateway",
     displayName: "Support Phone",
-    providerInstanceId: "support-line",
+    providerInstanceId: `support-${phoneId}`,
     status: "connected",
   });
   return { workspaceId, phoneId };
@@ -76,6 +77,7 @@ function fakeAdapter(
 ): WhatsAppGatewayAdapter {
   const normalizedChats = chats.map((chat) => ({
     title: chat.title ?? null,
+    avatarUrl: chat.avatarUrl ?? null,
     channelType: chat.channelType ?? "group",
     participantCount: chat.participantCount,
     providerChatId: chat.providerChatId,
@@ -115,6 +117,74 @@ function makeService(adapter: WhatsAppGatewayAdapter) {
 }
 
 describe("PhonesService.syncGroups (integration)", () => {
+  it("keeps the phone syncing until recent history has been fetched", async () => {
+    const { workspaceId, phoneId } = await seedPhone();
+    let finishHistory!: (messages: GatewayChatMessage[]) => void;
+    const history = new Promise<GatewayChatMessage[]>((resolve) => {
+      finishHistory = resolve;
+    });
+    const adapter = fakeAdapter([
+      {
+        providerChatId: "120363000000@g.us",
+        title: "Client Support",
+        channelType: "group",
+      },
+    ]);
+    adapter.fetchMessages = vi.fn().mockReturnValue(history);
+    const { service } = makeService(adapter);
+
+    await service.syncGroups(user(workspaceId), phoneId);
+
+    const [duringSync] = await db
+      .select({
+        status: schema.phoneInstances.status,
+        lastSyncAt: schema.phoneInstances.lastSyncAt,
+      })
+      .from(schema.phoneInstances)
+      .where(eq(schema.phoneInstances.id, phoneId));
+    expect(duringSync).toEqual({ status: "syncing", lastSyncAt: null });
+
+    finishHistory([]);
+    await vi.waitFor(async () => {
+      const [completed] = await db
+        .select({
+          status: schema.phoneInstances.status,
+          lastSyncAt: schema.phoneInstances.lastSyncAt,
+        })
+        .from(schema.phoneInstances)
+        .where(eq(schema.phoneInstances.id, phoneId));
+      expect(completed?.status).toBe("connected");
+      expect(completed?.lastSyncAt).toBeInstanceOf(Date);
+    });
+  });
+
+  it("uses the phone number when a direct chat has no contact name", async () => {
+    const { workspaceId, phoneId } = await seedPhone();
+    const adapter = fakeAdapter([
+      {
+        providerChatId: "919876543210@c.us",
+        title: null,
+        channelType: "direct",
+        avatarUrl: "https://example.test/avatar.jpg",
+      },
+    ]);
+    const { service } = makeService(adapter);
+
+    await service.syncGroups(user(workspaceId), phoneId);
+
+    const [channel] = await db
+      .select({
+        title: schema.channels.title,
+        avatarUrl: schema.channels.avatarUrl,
+      })
+      .from(schema.channels)
+      .where(eq(schema.channels.phoneInstanceId, phoneId));
+    expect(channel).toEqual({
+      title: "+919876543210",
+      avatarUrl: "https://example.test/avatar.jpg",
+    });
+  });
+
   it("syncs gateway groups into unmapped channels and stamps the phone", async () => {
     const { workspaceId, phoneId } = await seedPhone();
     const adapter = fakeAdapter([
@@ -137,7 +207,7 @@ describe("PhonesService.syncGroups (integration)", () => {
     });
 
     expect(adapter.fetchChats).toHaveBeenCalledWith({
-      providerInstanceId: "support-line",
+      providerInstanceId: expect.any(String),
     });
 
     const channels = await db

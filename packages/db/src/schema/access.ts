@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   pgTable,
   text,
@@ -75,6 +76,7 @@ export const userChannelReadState = pgTable(
       .references(() => channels.id, { onDelete: "cascade" }),
     lastReadMessageId: uuid("last_read_message_id"),
     lastReadAt: timestamp("last_read_at", { withTimezone: true }),
+    isMarkedUnread: boolean("is_marked_unread").notNull().default(false),
     ...timestamps,
   },
   (t) => [uniqueIndex("user_channel_read_state_uq").on(t.userId, t.channelId)],

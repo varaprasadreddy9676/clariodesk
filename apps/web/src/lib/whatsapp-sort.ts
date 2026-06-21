@@ -4,26 +4,35 @@ function timeValue(value: string | null | undefined): number {
   return value ? new Date(value).getTime() : 0;
 }
 
-function channelPriority(channel: Channel): number {
-  if (channel.unread > 0) return 0;
-  if (channel.awaitingResponseSince) return 1;
-  return 2;
-}
+export type ChannelView = "all" | "groups" | "direct" | "unread" | "archived";
 
 /**
- * Approximate WhatsApp chat ordering:
- * unread chats first, then waiting-for-reply threads, then the rest by newest activity.
+ * WhatsApp-style ordering with provider-confirmed pins kept above activity.
  */
 export function sortChannelsLikeWhatsApp(channels: Channel[]): Channel[] {
   return [...channels].sort((a, b) => {
-    const priorityDelta = channelPriority(a) - channelPriority(b);
-    if (priorityDelta !== 0) return priorityDelta;
+    const pinDelta = Number(b.isPinned) - Number(a.isPinned);
+    if (pinDelta !== 0) return pinDelta;
 
     const activityDelta =
       timeValue(b.lastActivityAt) - timeValue(a.lastActivityAt);
     if (activityDelta !== 0) return activityDelta;
 
-    return a.title.localeCompare(b.title);
+    return a.id.localeCompare(b.id);
+  });
+}
+
+export function filterChannelsByView(
+  channels: Channel[],
+  view: ChannelView,
+): Channel[] {
+  return channels.filter((channel) => {
+    if (view === "archived") return channel.status === "archived";
+    if (channel.status === "archived") return false;
+    if (view === "groups") return channel.channelType === "group";
+    if (view === "direct") return channel.channelType !== "group";
+    if (view === "unread") return channel.isMarkedUnread || channel.unread > 0;
+    return true;
   });
 }
 

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   pgTable,
   text,
@@ -33,6 +34,8 @@ export const channels = pgTable(
     subject: text("subject"),
     avatarUrl: text("avatar_url"),
     status: channelStatusEnum("status").notNull().default("unmapped"),
+    isPinned: boolean("is_pinned").notNull().default(false),
+    isMuted: boolean("is_muted").notNull().default(false),
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
     // First-response read model (TDD §14.3): set when an eligible client
     // message is awaiting a team reply; cleared when the team replies.
@@ -50,6 +53,42 @@ export const channels = pgTable(
       t.providerChatId,
     ),
     index("channels_ws_status_idx").on(t.workspaceId, t.status),
+    // Covers the channel-list ORDER BY isPinned DESC, lastMessageAt DESC
+    index("channels_ws_last_msg_idx").on(t.workspaceId, t.lastMessageAt),
+  ],
+);
+
+/** Idempotent reservation for provider-side chat/group creation commands. */
+export const conversationCommands = pgTable(
+  "conversation_commands",
+  {
+    id: pk(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    phoneInstanceId: uuid("phone_instance_id")
+      .notNull()
+      .references(() => phoneInstances.id, { onDelete: "cascade" }),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    commandType: text("command_type").notNull(),
+    status: text("status").notNull().default("pending"),
+    providerChatId: text("provider_chat_id"),
+    channelId: uuid("channel_id").references(() => channels.id, {
+      onDelete: "set null",
+    }),
+    outboxId: uuid("outbox_id"),
+    failureReason: text("failure_reason"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("conversation_commands_ws_key_uq").on(
+      t.workspaceId,
+      t.idempotencyKey,
+    ),
+    index("conversation_commands_status_idx").on(t.workspaceId, t.status),
   ],
 );
 

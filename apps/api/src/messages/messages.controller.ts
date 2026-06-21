@@ -7,6 +7,7 @@ import {
   Post,
   UseGuards,
 } from "@nestjs/common";
+import { z } from "zod";
 import {
   cursorPaginationSchema,
   createInternalNoteSchema,
@@ -18,6 +19,10 @@ import { CurrentUser } from "../common/current-user.decorator.js";
 import type { AuthUser } from "../common/auth-context.js";
 import { ZodValidationPipe } from "../common/zod.pipe.js";
 import { MessagesService } from "./messages.service.js";
+
+const reactionSchema = z.object({
+  reaction: z.string().min(1).max(16),
+});
 
 @Controller()
 @UseGuards(JwtAuthGuard)
@@ -41,6 +46,16 @@ export class MessagesController {
     body: CreateInternalNoteInput,
   ) {
     return this.messages.createNote(user, body);
+  }
+
+  @Post("messages/:messageId/reactions")
+  react(
+    @CurrentUser() user: AuthUser,
+    @Param("messageId") messageId: string,
+    @Body(new ZodValidationPipe(reactionSchema))
+    body: z.infer<typeof reactionSchema>,
+  ) {
+    return this.messages.react(user, messageId, body.reaction);
   }
 
   @Post("channels/:channelId/dev-seed-message")

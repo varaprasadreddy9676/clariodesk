@@ -80,7 +80,7 @@ async function seedRow(status: "pending" | "failed" | "expired" = "pending") {
     workspaceId,
     adapterType: "clario_gateway",
     displayName: "Support Phone",
-    providerInstanceId: "phone-1",
+    providerInstanceId: `phone-${phoneInstanceId}`,
     status: "connected",
   });
   await db.insert(schema.clients).values({
@@ -152,7 +152,7 @@ describe("media download processor (integration)", () => {
     } as Job);
 
     expect(adapter.downloadMedia).toHaveBeenCalledWith({
-      providerInstanceId: "phone-1",
+      providerInstanceId: expect.any(String),
       providerMediaId: "MEDIA-1",
       providerMediaKey: "MEDIA-KEY",
     });

@@ -73,7 +73,7 @@ async function seedWorkspace() {
     workspaceId,
     adapterType: "clario_gateway",
     displayName: "Phone",
-    providerInstanceId: "phone-1",
+    providerInstanceId: `phone-${phoneId}`,
     status: "connected",
   });
   await db.insert(schema.channels).values({
@@ -107,7 +107,7 @@ describe("MessagesService.syncMessages (integration)", () => {
     });
 
     expect(adapter.fetchMessages).toHaveBeenCalledWith({
-      providerInstanceId: "phone-1",
+      providerInstanceId: expect.any(String),
       providerChatId: "120363000000@g.us",
       limit: 50,
     });
@@ -165,6 +165,78 @@ describe("MessagesService.syncMessages (integration)", () => {
           providerMediaId: "opaque-media-handle",
         },
       ],
+    });
+  });
+});
+
+describe("MessagesService.timeline (integration)", () => {
+  it("returns the resolved sender name instead of an internal sender type", async () => {
+    const { workspaceId, phoneId, channelId } = await seedWorkspace();
+    const [contact] = await db
+      .insert(schema.contacts)
+      .values({
+        workspaceId,
+        primaryPhone: "919876543210",
+        canonicalName: "Maya Rao",
+      })
+      .returning({ id: schema.contacts.id });
+    await db.insert(schema.messages).values({
+      workspaceId,
+      channelId,
+      phoneInstanceId: phoneId,
+      providerMessageId: randomUUID(),
+      providerChatId: "120363000000@g.us",
+      providerSenderId: "919876543210@c.us",
+      senderContactId: contact!.id,
+      messageType: "text",
+      direction: "inbound",
+      sentByType: "client_user",
+      body: "Hello",
+      providerTimestamp: new Date(),
+    });
+    const service = makeService({} as WhatsAppGatewayAdapter);
+
+    const result = await service.timeline(admin(workspaceId), channelId, {
+      limit: 50,
+    });
+
+    expect(result.messages[0]).toMatchObject({
+      body: "Hello",
+      senderName: "Maya Rao",
+    });
+  });
+});
+
+describe("MessagesService.react (integration)", () => {
+  it("sends a reaction using the message's WhatsApp identifiers", async () => {
+    const { workspaceId, phoneId, channelId } = await seedWorkspace();
+    const [message] = await db
+      .insert(schema.messages)
+      .values({
+        workspaceId,
+        channelId,
+        phoneInstanceId: phoneId,
+        providerMessageId: "provider-message-1",
+        providerChatId: "120363000000@g.us",
+        messageType: "text",
+        direction: "inbound",
+        body: "Hello",
+        providerTimestamp: new Date(),
+      })
+      .returning({ id: schema.messages.id });
+    const reactToMessage = vi.fn().mockResolvedValue({ ok: true });
+    const service = makeService({
+      reactToMessage,
+    } as unknown as WhatsAppGatewayAdapter);
+
+    await expect(
+      service.react(admin(workspaceId), message!.id, "👍"),
+    ).resolves.toEqual({ ok: true });
+    expect(reactToMessage).toHaveBeenCalledWith({
+      providerInstanceId: expect.any(String),
+      providerChatId: "120363000000@g.us",
+      providerMessageId: "provider-message-1",
+      reaction: "👍",
     });
   });
 });

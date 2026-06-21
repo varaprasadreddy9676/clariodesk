@@ -15,6 +15,7 @@ const channelTone: Record<ChannelStatus, BadgeTone> = {
   unmapped: "warn",
   mixed: "info",
   muted: "neutral",
+  archived: "neutral",
   degraded: "danger",
 };
 

@@ -5,6 +5,9 @@ import type {
   CreateProjectInput,
   CreateUserInput,
   CreateTicketInput,
+  CreateDirectConversationInput,
+  CreateGroupConversationInput,
+  ChannelActionInput,
   LoginInput,
   MapChannelInput,
   SendReplyInput,
@@ -38,17 +41,24 @@ export type ApiPhone = {
 
 export type ApiChannel = {
   id: string;
+  providerChatId: string;
   title: string | null;
+  avatarUrl: string | null;
   channelType: "group" | "direct" | "official_direct";
   status: "active" | "archived" | "muted" | "unmapped";
   lastMessageAt: string | null;
   awaitingResponseSince: string | null;
   lastAgentReplyAt: string | null;
+  lastMessage: string | null;
+  lastMessageType: string | null;
   clientId: string | null;
   clientName: string | null;
   projectId: string | null;
   projectName: string | null;
   mappingMode: "unmapped" | "single_client" | "mixed" | "archived" | null;
+  isPinned: boolean;
+  isMuted: boolean;
+  isMarkedUnread: boolean;
 };
 
 export type ApiMessage = {
@@ -57,6 +67,7 @@ export type ApiMessage = {
   messageType: string;
   direction: "inbound" | "outbound" | "note";
   sentByType: string;
+  senderName: string | null;
   providerTimestamp: string;
   isBackfill: boolean;
   status: string;
@@ -72,6 +83,12 @@ export type ApiMessage = {
 export type ApiTimeline = {
   messages: ApiMessage[];
   nextCursor: number | null;
+};
+
+export type CreatedConversation = {
+  channelId: string;
+  providerChatId: string;
+  outboxId: string | null;
 };
 
 export type ApiTicket = {
@@ -156,7 +173,12 @@ export function readStoredSession(): AuthSession | null {
   const raw = localStorage.getItem(TOKEN_KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as AuthSession;
+    const session = JSON.parse(raw) as AuthSession;
+    if (isTokenExpired(session.token)) {
+      localStorage.removeItem(TOKEN_KEY);
+      return null;
+    }
+    return session;
   } catch {
     localStorage.removeItem(TOKEN_KEY);
     return null;
@@ -172,7 +194,10 @@ export function clearSession(): void {
 }
 
 export class ClarioApiClient {
-  constructor(private readonly getSession: () => AuthSession | null) {}
+  constructor(
+    private readonly getSession: () => AuthSession | null,
+    private readonly onUnauthorized?: () => void,
+  ) {}
 
   login(input: LoginInput): Promise<AuthSession> {
     return this.request<AuthSession>("/auth/login", {
@@ -232,8 +257,48 @@ export class ClarioApiClient {
     return this.request(`/phones/${id}/disconnect`, { method: "POST" });
   }
 
-  channels(): Promise<ApiChannel[]> {
-    return this.request("/channels");
+  channels(view?: "archived"): Promise<ApiChannel[]> {
+    return this.request(
+      view === "archived" ? "/channels?view=archived" : "/channels",
+    );
+  }
+
+  applyChannelAction(
+    channelId: string,
+    input: ChannelActionInput,
+  ): Promise<{
+    channelId: string;
+    status: string;
+    isPinned: boolean;
+    isMuted: boolean;
+    isMarkedUnread: boolean;
+  }> {
+    return this.request(`/channels/${channelId}/actions`, {
+      method: "POST",
+      body: input,
+      timeoutMs: 25_000,
+    });
+  }
+
+  clearChannelUnread(channelId: string): Promise<{
+    channelId: string;
+    isMarkedUnread: false;
+  }> {
+    return this.request(`/channels/${channelId}/read-state`, {
+      method: "PATCH",
+      body: { markedUnread: false },
+      timeoutMs: 25_000,
+    });
+  }
+
+  refreshChannel(channelId: string): Promise<{
+    acceptedMessages: number;
+    metadataChanged: boolean;
+  }> {
+    return this.request(`/channels/${channelId}/refresh`, {
+      method: "POST",
+      timeoutMs: 25_000,
+    });
   }
 
   timeline(channelId: string): Promise<ApiTimeline> {
@@ -295,8 +360,56 @@ export class ClarioApiClient {
     return this.request("/outbox", { method: "POST", body: input });
   }
 
+  async sendMedia(input: {
+    channelId: string;
+    body: string;
+    file: File;
+    idempotencyKey: string;
+  }): Promise<{
+    outboxId: string;
+    sendAfter: string;
+    cancellableForMs: number;
+  }> {
+    return this.request("/outbox/media", {
+      method: "POST",
+      body: {
+        channelId: input.channelId,
+        body: input.body,
+        fileName: input.file.name,
+        mimeType: input.file.type,
+        mediaBase64: await fileToBase64(input.file),
+        idempotencyKey: input.idempotencyKey,
+      },
+    });
+  }
+
+  createDirectConversation(
+    input: CreateDirectConversationInput,
+  ): Promise<CreatedConversation> {
+    return this.request("/conversations/direct", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  createGroupConversation(
+    input: CreateGroupConversationInput,
+  ): Promise<CreatedConversation> {
+    return this.request("/conversations/groups", {
+      method: "POST",
+      body: input,
+    });
+  }
+
   createNote(input: CreateInternalNoteInput): Promise<{ id: string }> {
     return this.request("/notes", { method: "POST", body: input });
+  }
+
+  reactToMessage(id: string, reaction: string): Promise<{ ok: true }> {
+    return this.request(`/messages/${id}/reactions`, {
+      method: "POST",
+      body: { reaction },
+    });
   }
 
   mediaUrl(id: string): Promise<{
@@ -322,7 +435,12 @@ export class ClarioApiClient {
 
   private async request<T>(
     path: string,
-    options: { method?: string; body?: unknown; auth?: boolean } = {},
+    options: {
+      method?: string;
+      body?: unknown;
+      auth?: boolean;
+      timeoutMs?: number;
+    } = {},
   ): Promise<T> {
     const headers = new Headers();
     if (options.body !== undefined)
@@ -332,18 +450,64 @@ export class ClarioApiClient {
       if (!session?.token) throw new Error("Not signed in");
       headers.set("Authorization", `Bearer ${session.token}`);
     }
-    const res = await fetch(`${API_BASE_URL}${path}`, {
-      method: options.method ?? "GET",
-      headers,
-      ...(options.body !== undefined
-        ? { body: JSON.stringify(options.body) }
-        : {}),
-    });
+    const controller = new AbortController();
+    const timeout = options.timeoutMs
+      ? globalThis.setTimeout(() => controller.abort(), options.timeoutMs)
+      : undefined;
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE_URL}${path}`, {
+        method: options.method ?? "GET",
+        headers,
+        signal: controller.signal,
+        ...(options.body !== undefined
+          ? { body: JSON.stringify(options.body) }
+          : {}),
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error("WhatsApp did not confirm this change in time", {
+          cause: error,
+        });
+      }
+      throw error;
+    } finally {
+      if (timeout) globalThis.clearTimeout(timeout);
+    }
     if (!res.ok) {
+      if (res.status === 401 && options.auth !== false) {
+        clearSession();
+        this.onUnauthorized?.();
+      }
       const text = await res.text().catch(() => "");
       throw new Error(toApiError(res.status, text));
     }
     return (await res.json()) as T;
+  }
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunkSize = 32_768;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(
+      ...bytes.subarray(offset, offset + chunkSize),
+    );
+  }
+  return btoa(binary);
+}
+
+function isTokenExpired(token: string): boolean {
+  const payload = token.split(".")[1];
+  if (!payload) return true;
+  try {
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const parsed = JSON.parse(atob(padded)) as { exp?: unknown };
+    return typeof parsed.exp !== "number" || parsed.exp * 1_000 <= Date.now();
+  } catch {
+    return true;
   }
 }
 

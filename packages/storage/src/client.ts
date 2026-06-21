@@ -96,6 +96,14 @@ export class ObjectStorage {
     );
   }
 
+  async getMedia(key: string): Promise<Uint8Array> {
+    const result = await this.s3.send(
+      new GetObjectCommand({ Bucket: this.mediaBucket, Key: key }),
+    );
+    if (!result.Body) throw new Error(`Media object ${key} has no body`);
+    return result.Body.transformToByteArray();
+  }
+
   /** Hard-delete a media object (retention purge, TDD §17.4). */
   async deleteMedia(key: string): Promise<void> {
     await this.s3.send(

@@ -57,6 +57,7 @@ export function makeNormalizeProcessor(deps: WorkerDeps) {
       );
     }
 
+    try {
     for (const event of events) {
       if (storm.throttleMs > 0) await sleep(storm.throttleMs);
       const outcome = await normalizeEvent(
@@ -129,6 +130,10 @@ export function makeNormalizeProcessor(deps: WorkerDeps) {
           phoneInstanceId,
         });
       }
+    }
+    } catch (err) {
+      log.error({ err: String(err) }, "normalization batch failed");
+      throw err; // let BullMQ retry (configure attempts on enqueue)
     }
   };
 }

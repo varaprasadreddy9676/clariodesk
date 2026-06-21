@@ -1,17 +1,28 @@
 import {
+  Archive,
+  ArchiveRestore,
   BarChart3,
+  Bell,
+  BellOff,
   CheckCircle2,
   Clipboard,
   Copy,
+  Eye,
+  EyeOff,
   Inbox,
+  LockKeyhole,
   LogOut,
+  MessageCircleMore,
   Phone,
+  Pin,
+  PinOff,
   Plus,
   QrCode,
   RefreshCcw,
   Search,
   Settings,
   Shield,
+  ShieldCheck,
   Smartphone,
   Ticket,
   Users,
@@ -19,6 +30,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent } from "react";
 import {
   clearSession,
   ClarioApiClient,
@@ -37,13 +49,15 @@ import { ChannelList, type ChannelView } from "./components/ChannelList.js";
 import { Composer } from "./components/Composer.js";
 import { ContextPanel } from "./components/ContextPanel.js";
 import { NotificationCenter } from "./components/NotificationCenter.js";
+import { NewConversationFab } from "./components/NewConversationFab.js";
 import type { ComposerDraft } from "./components/Composer.js";
 import { OpsBar } from "./components/OpsBar.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { Timeline } from "./components/Timeline.js";
-import { useAsyncData } from "./hooks.js";
+import { useAsyncData, useLatestRef } from "./hooks.js";
 import { useRealtimeFeed, type RealtimeEvent } from "./realtime.js";
 import {
+  filterChannelsByView,
   sortChannelsLikeWhatsApp,
   sortMessagesLikeWhatsApp,
 } from "./lib/whatsapp-sort.js";
@@ -57,13 +71,36 @@ import type {
 
 type Toast = { kind: "ok" | "error"; text: string } | null;
 type ContextTab = "Ticket" | "Channel" | "People" | "Events";
-type ChannelMenuAction = "open" | "copy-title" | "copy-id";
+type ChannelMenuAction =
+  | "open"
+  | "refresh"
+  | "mark-unread"
+  | "pin"
+  | "unpin"
+  | "mute"
+  | "unmute"
+  | "archive"
+  | "unarchive"
+  | "copy-title"
+  | "copy-provider-id"
+  | "copy-clario-id";
 
 type ChannelMenuState = {
   channel: Channel;
   x: number;
   y: number;
 };
+
+function createWorkspaceSlug(name: string): string {
+  const base = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50);
+  const suffix = crypto.randomUUID().slice(0, 8);
+  return `${base || "workspace"}-${suffix}`;
+}
 
 const navIcons = {
   inbox: Inbox,
@@ -76,13 +113,19 @@ const navIcons = {
   settings: Settings,
 };
 
+const mobileNavItems = ["inbox", "tickets", "search", "phones", "settings"] as const;
+
 export function App() {
   const [session, setSession] = useState<AuthSession | null>(() =>
     readStoredSession(),
   );
   const api = useMemo(
-    () => new ClarioApiClient(() => readStoredSession()),
-    [session],
+    () =>
+      new ClarioApiClient(
+        () => readStoredSession(),
+        () => setSession(null),
+      ),
+    [],
   );
 
   if (!session) {
@@ -109,15 +152,16 @@ function AuthScreen({
   onSession: (session: AuthSession) => void;
 }) {
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [email, setEmail] = useState("admin@demo.test");
-  const [password, setPassword] = useState("demo-password");
-  const [displayName, setDisplayName] = useState("Demo Admin");
-  const [workspaceName, setWorkspaceName] = useState("Demo Workspace");
-  const [workspaceSlug, setWorkspaceSlug] = useState("demo");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  async function submit() {
+  async function submit(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
@@ -129,7 +173,7 @@ function AuthScreen({
               password,
               displayName,
               workspaceName,
-              workspaceSlug,
+              workspaceSlug: createWorkspaceSlug(workspaceName),
             });
       storeSession(auth);
       onSession(auth);
@@ -142,71 +186,194 @@ function AuthScreen({
 
   return (
     <main className="auth-screen">
-      <section className="auth-card" aria-label="Sign in">
-        <div className="brand-lockup large">
-          <div className="brand-mark" aria-hidden="true">
-            C
+      <section className="auth-shell" aria-label="ClarioDesk access">
+        <div className="auth-visual" aria-hidden="true">
+          <div className="auth-visual-brand">
+            <div className="auth-brand-mark">C</div>
+            <div>
+              <strong>ClarioDesk</strong>
+              <span>Support operations</span>
+            </div>
           </div>
-          <div>
+
+          <div className="auth-story">
+            <span className="auth-eyebrow">
+              <MessageCircleMore size={15} /> Shared WhatsApp inbox
+            </span>
+            <h1>Support conversations, finally organized.</h1>
+            <p>
+              Keep every customer group, owner, ticket, and private note in one
+              calm workspace.
+            </p>
+          </div>
+
+          <div className="auth-chat-preview">
+            <div className="auth-chat-header">
+              <div className="auth-chat-avatar">AC</div>
+              <div>
+                <strong>Acme · Support</strong>
+                <span>4 participants</span>
+              </div>
+              <span className="auth-live-dot">Live</span>
+            </div>
+            <div className="auth-chat-body">
+              <div className="auth-bubble incoming">
+                <strong>Maya · Acme</strong>
+                <span>The payment report is not loading for our team.</span>
+                <time>10:42</time>
+              </div>
+              <div className="auth-bubble note">
+                <strong>Private note · Arjun</strong>
+                <span>
+                  I can reproduce this. Linking it to the open incident.
+                </span>
+                <time>10:43</time>
+              </div>
+              <div className="auth-bubble outgoing">
+                <span>
+                  Thanks Maya. We found the issue and are working on it now.
+                </span>
+                <time>10:45 ✓✓</time>
+              </div>
+            </div>
+            <div className="auth-ticket-row">
+              <span>
+                <LockKeyhole size={14} /> CD-1842
+              </span>
+              <strong>Assigned to Arjun</strong>
+              <em>In progress</em>
+            </div>
+          </div>
+        </div>
+
+        <div className="auth-panel">
+          <div className="auth-mobile-brand">
+            <div className="auth-brand-mark">C</div>
             <strong>ClarioDesk</strong>
-            <span>WhatsApp group operations</span>
           </div>
+
+          <form className="auth-form" onSubmit={(event) => void submit(event)}>
+            <header className="auth-form-header">
+              <span className="auth-form-icon">
+                <LockKeyhole size={20} />
+              </span>
+              <h2>
+                {mode === "login" ? "Welcome back" : "Create your workspace"}
+              </h2>
+              <p>
+                {mode === "login"
+                  ? "Sign in to continue to your support workspace."
+                  : "Set up a workspace for your support team."}
+              </p>
+            </header>
+
+            <div
+              className="auth-tabs"
+              role="tablist"
+              aria-label="Account access"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "login"}
+                className={mode === "login" ? "is-active" : ""}
+                onClick={() => {
+                  setMode("login");
+                  setError(null);
+                }}
+              >
+                Sign in
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "register"}
+                className={mode === "register" ? "is-active" : ""}
+                onClick={() => {
+                  setMode("register");
+                  setError(null);
+                }}
+              >
+                Create workspace
+              </button>
+            </div>
+
+            <div className="auth-fields">
+              {mode === "register" ? (
+                <>
+                  <Field
+                    label="Workspace name"
+                    value={workspaceName}
+                    onChange={setWorkspaceName}
+                    autoComplete="organization"
+                    required
+                  />
+                  <Field
+                    label="Your name"
+                    value={displayName}
+                    onChange={setDisplayName}
+                    autoComplete="name"
+                    required
+                  />
+                </>
+              ) : null}
+              <Field
+                label="Work email"
+                value={email}
+                onChange={setEmail}
+                type="email"
+                autoComplete="email"
+                placeholder="you@company.com"
+                required
+              />
+              <div className="field">
+                <label htmlFor="auth-password">Password</label>
+                <span className="password-input">
+                  <input
+                    id="auth-password"
+                    value={password}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete={
+                      mode === "login" ? "current-password" : "new-password"
+                    }
+                    minLength={8}
+                    required
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                    title={showPassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowPassword((visible) => !visible)}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </span>
+              </div>
+            </div>
+
+            {error ? (
+              <div className="form-error" role="alert">
+                {error}
+              </div>
+            ) : null}
+            <button className="auth-submit" type="submit" disabled={submitting}>
+              {submitting
+                ? mode === "login"
+                  ? "Signing in..."
+                  : "Creating workspace..."
+                : mode === "login"
+                  ? "Sign in"
+                  : "Create workspace"}
+            </button>
+
+            <div className="auth-trust">
+              <ShieldCheck size={16} /> Protected workspace access
+            </div>
+          </form>
         </div>
-        <div className="segmented">
-          <button
-            type="button"
-            className={mode === "login" ? "is-active" : ""}
-            onClick={() => setMode("login")}
-          >
-            Login
-          </button>
-          <button
-            type="button"
-            className={mode === "register" ? "is-active" : ""}
-            onClick={() => setMode("register")}
-          >
-            Register
-          </button>
-        </div>
-        {mode === "register" ? (
-          <>
-            <Field
-              label="Workspace"
-              value={workspaceName}
-              onChange={setWorkspaceName}
-            />
-            <Field
-              label="Workspace slug"
-              value={workspaceSlug}
-              onChange={setWorkspaceSlug}
-            />
-            <Field
-              label="Display name"
-              value={displayName}
-              onChange={setDisplayName}
-            />
-          </>
-        ) : null}
-        <Field label="Email" value={email} onChange={setEmail} type="email" />
-        <Field
-          label="Password"
-          value={password}
-          onChange={setPassword}
-          type="password"
-        />
-        {error ? <div className="form-error">{error}</div> : null}
-        <button
-          className="primary-action wide"
-          type="button"
-          disabled={submitting}
-          onClick={() => void submit()}
-        >
-          {submitting
-            ? "Checking..."
-            : mode === "login"
-              ? "Sign in"
-              : "Create workspace"}
-        </button>
       </section>
     </main>
   );
@@ -225,6 +392,7 @@ function Workbench({
   const [activeChannelId, setActiveChannelId] = useState("");
   const [channelQuery, setChannelQuery] = useState("");
   const [channelView, setChannelView] = useState<ChannelView>("all");
+  const [mobilePane, setMobilePane] = useState<"list" | "chat">("list");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [contextOpen, setContextOpen] = useState(true);
   const [contextTab, setContextTab] = useState<ContextTab>("Ticket");
@@ -246,7 +414,10 @@ function Workbench({
   const refreshTimers = useRef<Record<string, number | undefined>>({});
   const ops = useAsyncData(() => api.opsSummary(), [api]);
   const phones = useAsyncData(() => api.phones(), [api]);
-  const channels = useAsyncData(() => api.channels(), [api]);
+  const channels = useAsyncData(
+    () => api.channels(channelView === "archived" ? "archived" : undefined),
+    [api, channelView],
+  );
   const tickets = useAsyncData(() => api.tickets(), [api]);
   const clients = useAsyncData(() => api.clients(), [api]);
   const team = useAsyncData(() => api.teamMembers(), [api]);
@@ -259,6 +430,10 @@ function Workbench({
     () =>
       toUiChannels(channels.data ?? [], tickets.data ?? [], phones.data ?? []),
     [channels.data, tickets.data, phones.data],
+  );
+  const historySyncing = useMemo(
+    () => (phones.data ?? []).some((phone) => phone.status === "syncing"),
+    [phones.data],
   );
   const filteredChannels = useMemo(
     () =>
@@ -294,16 +469,24 @@ function Workbench({
   );
   const uiOps = toUiOps(ops.data);
 
+  // Stable refs so scheduled callbacks always call the latest refresh fn
+  const channelsRefreshRef = useLatestRef(channels.refresh);
+  const opsRefreshRef = useLatestRef(ops.refresh);
+  const phonesRefreshRef = useLatestRef(phones.refresh);
+  const ticketsRefreshRef = useLatestRef(tickets.refresh);
+  const timelineRefreshRef = useLatestRef(timeline.refresh);
+  const resolveMediaUrl = useCallback((id: string) => api.mediaUrl(id), [api]);
+
   const refreshAll = useCallback(async () => {
     await Promise.all([
-      ops.refresh(),
-      phones.refresh(),
-      channels.refresh(),
-      tickets.refresh(),
+      opsRefreshRef.current(),
+      phonesRefreshRef.current(),
+      channelsRefreshRef.current(),
+      ticketsRefreshRef.current(),
       clients.refresh(),
       team.refresh(),
     ]);
-  }, [channels, clients, ops, phones, team, tickets]);
+  }, [channelsRefreshRef, clients, opsRefreshRef, phonesRefreshRef, team, ticketsRefreshRef]);
 
   const runAction = useCallback(
     async (action: () => Promise<void>, success: string) => {
@@ -337,22 +520,22 @@ function Workbench({
   const handleRealtimeEvent = useCallback(
     (event: RealtimeEvent) => {
       if (event.channelId) {
-        scheduleRefresh("channels", () => channels.refresh());
-        scheduleRefresh("ops", () => ops.refresh());
+        scheduleRefresh("channels", () => channelsRefreshRef.current());
+        scheduleRefresh("ops", () => opsRefreshRef.current());
       }
       if (event.type === "phone.status_changed") {
-        scheduleRefresh("phones", () => phones.refresh());
-        scheduleRefresh("ops", () => ops.refresh());
+        scheduleRefresh("phones", () => phonesRefreshRef.current());
+        scheduleRefresh("ops", () => opsRefreshRef.current());
       }
       if (event.type === "ticket.created" || event.type === "ticket.updated") {
-        scheduleRefresh("tickets", () => tickets.refresh());
-        scheduleRefresh("ops", () => ops.refresh());
+        scheduleRefresh("tickets", () => ticketsRefreshRef.current());
+        scheduleRefresh("ops", () => opsRefreshRef.current());
       }
       if (
         event.type === "note.created" ||
         event.type === "outbox.status_changed"
       ) {
-        scheduleRefresh("ops", () => ops.refresh());
+        scheduleRefresh("ops", () => opsRefreshRef.current());
       }
       if (
         event.channelId &&
@@ -363,16 +546,16 @@ function Workbench({
           event.type === "note.created" ||
           event.type === "outbox.status_changed")
       ) {
-        scheduleRefresh("timeline", () => timeline.refresh());
+        scheduleRefresh("timeline", () => timelineRefreshRef.current());
       }
     },
     [
       activeChannel?.id,
-      channels,
-      ops,
-      phones,
-      tickets,
-      timeline,
+      channelsRefreshRef,
+      opsRefreshRef,
+      phonesRefreshRef,
+      ticketsRefreshRef,
+      timelineRefreshRef,
       scheduleRefresh,
     ],
   );
@@ -396,6 +579,24 @@ function Workbench({
     ops.refresh,
     phones.refresh,
     realtime.status,
+    timeline.refresh,
+  ]);
+
+  useEffect(() => {
+    if (!historySyncing) return;
+    const interval = window.setInterval(() => {
+      void Promise.all([
+        phones.refresh(),
+        channels.refresh(),
+        activeChannel ? timeline.refresh() : Promise.resolve(),
+      ]);
+    }, 2_000);
+    return () => window.clearInterval(interval);
+  }, [
+    activeChannel?.id,
+    channels.refresh,
+    historySyncing,
+    phones.refresh,
     timeline.refresh,
   ]);
 
@@ -443,7 +644,6 @@ function Workbench({
 
   useEffect(() => {
     if (!activeChannel) return;
-    if (activeChannel.status === "muted") return;
     if (timeline.data == null) return;
     if (autoSyncedChannels.current.has(activeChannel.id)) return;
 
@@ -466,8 +666,8 @@ function Workbench({
     (channel: Channel, x: number, y: number) => {
       setChannelMenu({
         channel,
-        x: Math.min(x, window.innerWidth - 296),
-        y: Math.min(y, window.innerHeight - 260),
+        x: Math.max(8, Math.min(x, window.innerWidth - 228)),
+        y: Math.max(8, Math.min(y, window.innerHeight - 380)),
       });
     },
     [],
@@ -485,15 +685,67 @@ function Workbench({
         setContextOpen(false);
         setContextTab("Ticket");
         break;
+      case "refresh":
+        await runAction(async () => {
+          await api.refreshChannel(channel.id);
+          await Promise.all([channels.refresh(), timeline.refresh()]);
+        }, "Chat refreshed");
+        break;
+      case "mark-unread":
+        await runAction(async () => {
+          await api.applyChannelAction(channel.id, {
+            action: "mark_unread",
+            markedUnread: true,
+          });
+          await channels.refresh();
+        }, "Marked as unread");
+        break;
+      case "pin":
+      case "unpin":
+        await runAction(async () => {
+          await api.applyChannelAction(channel.id, {
+            action: "pin",
+            pinned: action === "pin",
+          });
+          await channels.refresh();
+        }, action === "pin" ? "Chat pinned" : "Chat unpinned");
+        break;
+      case "mute":
+      case "unmute":
+        await runAction(async () => {
+          await api.applyChannelAction(channel.id, {
+            action: "mute",
+            muted: action === "mute",
+          });
+          await channels.refresh();
+        }, action === "mute" ? "Chat muted" : "Chat unmuted");
+        break;
+      case "archive":
+      case "unarchive":
+        await runAction(async () => {
+          await api.applyChannelAction(channel.id, {
+            action: "archive",
+            archived: action === "archive",
+          });
+          setActiveChannelId("");
+          await channels.refresh();
+        }, action === "archive" ? "Chat archived" : "Chat restored");
+        break;
       case "copy-title":
         void navigator.clipboard.writeText(channel.title).then(
           () => setToast({ kind: "ok", text: "Channel title copied" }),
           () => setToast({ kind: "error", text: "Clipboard write failed" }),
         );
         break;
-      case "copy-id":
+      case "copy-provider-id":
+        void navigator.clipboard.writeText(channel.providerChatId).then(
+          () => setToast({ kind: "ok", text: "WhatsApp ID copied" }),
+          () => setToast({ kind: "error", text: "Clipboard write failed" }),
+        );
+        break;
+      case "copy-clario-id":
         void navigator.clipboard.writeText(channel.id).then(
-          () => setToast({ kind: "ok", text: "Channel ID copied" }),
+          () => setToast({ kind: "ok", text: "ClarioDesk ID copied" }),
           () => setToast({ kind: "error", text: "Clipboard write failed" }),
         );
         break;
@@ -501,6 +753,28 @@ function Workbench({
         break;
     }
   }
+
+  const selectChannel = useCallback(
+    (id: string) => {
+      setActiveChannelId(id);
+      setMobilePane("chat");
+      const channel = mappedChannels.find((item) => item.id === id);
+      if (!channel?.isMarkedUnread) return;
+      void api
+        .clearChannelUnread(id)
+        .then(() => channels.refresh())
+        .catch((error) =>
+          setToast({
+            kind: "error",
+            text:
+              error instanceof Error
+                ? error.message
+                : "Could not clear unread state",
+          }),
+        );
+    },
+    [api, channels.refresh, mappedChannels],
+  );
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
@@ -526,20 +800,87 @@ function Workbench({
           <div className={`toast toast-${toast.kind}`}>{toast.text}</div>
         ) : null}
         {activeNav === "inbox" ? (
-          activeChannel ? (
+          channels.status === "loading" || channels.status === "idle" ? (
+            <div className="inbox-grid context-closed">
+              <div className="channel-list-stack">
+                <div className="channel-list-skeleton" aria-hidden="true">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="channel-row-skeleton" />
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : channels.status === "error" ? (
+            <div className="inbox-grid context-closed">
+              <div className="channel-list-stack">
+                <div className="center-panel">
+                  <p role="alert" className="form-error">
+                    {channels.error}
+                  </p>
+                  <button
+                    type="button"
+                    className="primary-action"
+                    onClick={() => void channels.refresh()}
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : activeChannel ? (
             <div
-              className={`inbox-grid ${contextOpen ? "" : "context-closed"}`}
+              className={`inbox-grid mobile-${mobilePane} ${contextOpen ? "" : "context-closed"}`}
             >
-              <ChannelList
-                channels={filteredChannels}
-                activeId={activeChannel.id}
-                onSelect={setActiveChannelId}
-                onOpenMenu={openChannelMenu}
-                query={channelQuery}
-                onQueryChange={setChannelQuery}
-                view={channelView}
-                onViewChange={setChannelView}
-              />
+              <div className="channel-list-stack">
+                <ChannelList
+                  channels={filteredChannels}
+                  activeId={activeChannel.id}
+                  onSelect={selectChannel}
+                  onOpenMenu={openChannelMenu}
+                  query={channelQuery}
+                  onQueryChange={setChannelQuery}
+                  view={channelView}
+                  onViewChange={setChannelView}
+                  syncing={historySyncing}
+                />
+                <NewConversationFab
+                  phones={(phones.data ?? []).filter(
+                    (phone) =>
+                      phone.status === "connected" ||
+                      phone.status === "syncing",
+                  )}
+                  onCreateChat={async (input) => {
+                    const created = await api.createDirectConversation({
+                      phoneInstanceId: input.phoneInstanceId,
+                      phoneNumber: input.phoneNumber,
+                      initialMessage: input.initialMessage,
+                      idempotencyKey: crypto.randomUUID(),
+                    });
+                    if (input.attachment) {
+                      await api.sendMedia({
+                        channelId: created.channelId,
+                        body: "",
+                        file: input.attachment,
+                        idempotencyKey: crypto.randomUUID(),
+                      });
+                    }
+                    await channels.refresh();
+                    setActiveChannelId(created.channelId);
+                    setMobilePane("chat");
+                    setToast({ kind: "ok", text: "WhatsApp chat started" });
+                  }}
+                  onCreateGroup={async (input) => {
+                    const created = await api.createGroupConversation({
+                      ...input,
+                      idempotencyKey: crypto.randomUUID(),
+                    });
+                    await channels.refresh();
+                    setActiveChannelId(created.channelId);
+                    setMobilePane("chat");
+                    setToast({ kind: "ok", text: "WhatsApp group created" });
+                  }}
+                />
+              </div>
               <div className="conversation-column">
                 <Timeline
                   channel={activeChannel}
@@ -583,19 +924,58 @@ function Workbench({
                   onRefresh={() => {
                     void timeline.refresh();
                   }}
-                  onResolveMediaUrl={(mediaId) => api.mediaUrl(mediaId)}
+                  onResolveMediaUrl={resolveMediaUrl}
+                  onReact={async (message, reaction) => {
+                    try {
+                      await api.reactToMessage(message.id, reaction);
+                      setToast({
+                        kind: "ok",
+                        text: `Reaction ${reaction} sent`,
+                      });
+                    } catch (error) {
+                      setToast({
+                        kind: "error",
+                        text:
+                          error instanceof Error
+                            ? error.message
+                            : "Reaction failed",
+                      });
+                      throw error;
+                    }
+                  }}
                   contextOpen={contextOpen}
                   onToggleContext={() => setContextOpen((value) => !value)}
+                  onBack={() => setMobilePane("list")}
+                  onOpenMenu={(e) => {
+                    const rect = (
+                      e.currentTarget as HTMLElement
+                    ).getBoundingClientRect();
+                    openChannelMenu(
+                      activeChannel,
+                      rect.right - 8,
+                      rect.bottom + 4,
+                    );
+                  }}
                 />
                 <Composer
                   channel={activeChannel}
                   draft={composerDraft}
-                  onSendReply={async (body) => {
-                    await api.sendReply({
-                      channelId: activeChannel.id,
-                      body,
-                      useSendDelay: true,
-                    });
+                  onSendReply={async ({ body, attachment }) => {
+                    if (attachment) {
+                      await api.sendMedia({
+                        channelId: activeChannel.id,
+                        body,
+                        file: attachment,
+                        idempotencyKey: crypto.randomUUID(),
+                      });
+                    } else {
+                      await api.sendReply({
+                        channelId: activeChannel.id,
+                        body,
+                        useSendDelay: true,
+                        idempotencyKey: crypto.randomUUID(),
+                      });
+                    }
                     await timeline.refresh();
                     await ops.refresh();
                   }}
@@ -678,6 +1058,27 @@ function Workbench({
           />
         ) : null}
       </main>
+      <nav className="mobile-nav" aria-label="Mobile navigation">
+        {mobileNavItems.map((id) => {
+          const Icon = navIcons[id];
+          return (
+            <button
+              key={id}
+              type="button"
+              className={activeNav === id ? "is-active" : ""}
+              aria-current={activeNav === id ? "page" : undefined}
+              onClick={() => {
+                setActiveNav(id);
+                setChannelMenu(null);
+                if (id === "inbox") setMobilePane("list");
+              }}
+            >
+              <Icon size={19} aria-hidden="true" />
+              <span>{id[0]?.toUpperCase()}{id.slice(1)}</span>
+            </button>
+          );
+        })}
+      </nav>
       <NotificationCenter
         open={notificationsOpen}
         status={realtime.status}
@@ -865,6 +1266,7 @@ function PhonesView({
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [phoneResult, setPhoneResult] = useState<string | null>(null);
   const autoSyncedPhones = useRef(new Set<string>());
+  const autoQrRequestedPhones = useRef(new Set<string>());
 
   async function doPhoneAction(
     key: string,
@@ -898,11 +1300,16 @@ function PhonesView({
           phoneId = created.id;
           await onChanged();
         }
-        const result = await api.connectPhone(phoneId);
-        setQr(result.qr ?? "Generating QR — refresh in a moment.");
-        setQrImage(result.qr ? await toQrImage(result.qr) : null);
+        let qrValue = (await api.connectPhone(phoneId)).qr;
+        // An already-linked number resumes its saved session and returns no QR.
+        // Force a fresh QR by re-pairing (logout clears the saved session).
+        if (!qrValue) {
+          qrValue = (await api.repairPhone(phoneId)).qr;
+        }
+        setQr(qrValue ?? "Generating QR — refresh in a moment.");
+        setQrImage(qrValue ? await toQrImage(qrValue) : null);
         await onChanged();
-        return result.qr ? "Scan the QR with WhatsApp." : "Generating QR…";
+        return qrValue ? "Scan the QR with WhatsApp." : "Generating QR…";
       },
       "Link started",
     );
@@ -940,6 +1347,40 @@ function PhonesView({
   const legacyPhones = sortedPhones.filter(
     (phone) => phone.adapterType !== "clario_gateway",
   );
+
+  useEffect(() => {
+    if (
+      !primaryPhone ||
+      (primaryPhone.status !== "qr_required" &&
+        primaryPhone.status !== "disconnected") ||
+      qrImage
+    )
+      return;
+    if (autoQrRequestedPhones.current.has(primaryPhone.id)) return;
+
+    autoQrRequestedPhones.current.add(primaryPhone.id);
+    void (async () => {
+      setActionKey(`${primaryPhone.id}:qr`);
+      try {
+        const result = await api.connectPhone(primaryPhone.id);
+        if (!result.qr) {
+          autoQrRequestedPhones.current.delete(primaryPhone.id);
+          setPhoneResult("QR is still generating. It will retry shortly.");
+          return;
+        }
+        setQr(result.qr);
+        setQrImage(await toQrImage(result.qr));
+        setPhoneResult("Scan the QR with WhatsApp.");
+      } catch (err) {
+        autoQrRequestedPhones.current.delete(primaryPhone.id);
+        setPhoneResult(
+          err instanceof Error ? err.message : "Unable to retrieve QR",
+        );
+      } finally {
+        setActionKey(null);
+      }
+    })();
+  }, [api, primaryPhone?.id, primaryPhone?.status, qrImage]);
 
   useEffect(() => {
     const currentPhones = [...phones].sort((a, b) => {
@@ -1237,114 +1678,116 @@ function PhonesView({
         </article>
       )}
 
-      <details className="phone-setup-panel">
-        <summary>
-          <Plus size={16} aria-hidden="true" />
-          Advanced — add another number or a custom gateway
-        </summary>
-        <div className="phone-setup">
-          <input
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            placeholder="Display name"
-          />
-          <input
-            value={phoneNumber}
-            onChange={(event) => setPhoneNumber(event.target.value)}
-            placeholder="WhatsApp number, optional"
-          />
-          <input
-            value={providerInstanceId}
-            onChange={(event) => setProviderInstanceId(event.target.value)}
-            placeholder="Gateway instance id"
-          />
-          <button
-            type="button"
-            className="secondary-action"
-            onClick={() => setAdvancedOpen((value) => !value)}
-          >
-            {advancedOpen ? "Hide advanced" : "Advanced"}
-          </button>
-          {advancedOpen ? (
-            <>
-              <input
-                value={gatewayBaseUrl}
-                onChange={(event) => setGatewayBaseUrl(event.target.value)}
-                placeholder="Gateway base URL"
-              />
-              <input
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-                placeholder="API key"
-              />
-            </>
-          ) : null}
-          <button
-            className="primary-action"
-            type="button"
-            disabled={
-              !displayName.trim() ||
-              !providerInstanceId.trim() ||
-              actionKey === "create"
-            }
-            onClick={() =>
-              void doPhoneAction(
-                "create",
-                async () => {
-                  await api.createPhone({
-                    adapterType: "clario_gateway",
-                    displayName,
-                    providerInstanceId,
-                    ...(phoneNumber.trim()
-                      ? { phoneNumber: phoneNumber.trim() }
-                      : {}),
-                    ...(gatewayBaseUrl.trim()
-                      ? { gatewayBaseUrl: gatewayBaseUrl.trim() }
-                      : {}),
-                    ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
-                  });
-                  onChanged();
-                },
-                "Phone route created",
-              )
-            }
-          >
-            {actionKey === "create" ? "Adding..." : "Add route"}
-          </button>
-        </div>
-        {additionalPhones.length > 0 ||
-        hiddenDevPhones.length > 0 ||
-        legacyPhones.length > 0 ? (
-          <div className="phone-secondary-list">
-            {additionalPhones.map((phone) => (
-              <article className="phone-secondary-row" key={phone.id}>
-                <div>
-                  <strong>{phone.displayName}</strong>
-                  <span>
-                    {phone.phoneNumber ??
-                      phone.providerInstanceId ??
-                      "No number yet"}
-                  </span>
-                </div>
-                <em>{phone.status}</em>
-              </article>
-            ))}
-            {hiddenDevPhones.length > 0 ? (
-              <span>
-                {hiddenDevPhones.length} test route
-                {hiddenDevPhones.length === 1 ? "" : "s"} hidden from the main
-                view.
-              </span>
+      {visiblePhones.length > 0 ? (
+        <details className="phone-setup-panel">
+          <summary>
+            <Plus size={16} aria-hidden="true" />
+            Advanced — add another number or a custom gateway
+          </summary>
+          <div className="phone-setup">
+            <input
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="Display name"
+            />
+            <input
+              value={phoneNumber}
+              onChange={(event) => setPhoneNumber(event.target.value)}
+              placeholder="WhatsApp number, optional"
+            />
+            <input
+              value={providerInstanceId}
+              onChange={(event) => setProviderInstanceId(event.target.value)}
+              placeholder="Gateway instance id"
+            />
+            <button
+              type="button"
+              className="secondary-action"
+              onClick={() => setAdvancedOpen((value) => !value)}
+            >
+              {advancedOpen ? "Hide advanced" : "Advanced"}
+            </button>
+            {advancedOpen ? (
+              <>
+                <input
+                  value={gatewayBaseUrl}
+                  onChange={(event) => setGatewayBaseUrl(event.target.value)}
+                  placeholder="Gateway base URL"
+                />
+                <input
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  placeholder="API key"
+                />
+              </>
             ) : null}
-            {legacyPhones.length > 0 ? (
-              <span>
-                {legacyPhones.length} legacy route
-                {legacyPhones.length === 1 ? "" : "s"} hidden from Core v1.
-              </span>
-            ) : null}
+            <button
+              className="primary-action"
+              type="button"
+              disabled={
+                !displayName.trim() ||
+                !providerInstanceId.trim() ||
+                actionKey === "create"
+              }
+              onClick={() =>
+                void doPhoneAction(
+                  "create",
+                  async () => {
+                    await api.createPhone({
+                      adapterType: "clario_gateway",
+                      displayName,
+                      providerInstanceId,
+                      ...(phoneNumber.trim()
+                        ? { phoneNumber: phoneNumber.trim() }
+                        : {}),
+                      ...(gatewayBaseUrl.trim()
+                        ? { gatewayBaseUrl: gatewayBaseUrl.trim() }
+                        : {}),
+                      ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+                    });
+                    onChanged();
+                  },
+                  "Phone route created",
+                )
+              }
+            >
+              {actionKey === "create" ? "Adding..." : "Add route"}
+            </button>
           </div>
-        ) : null}
-      </details>
+          {additionalPhones.length > 0 ||
+          hiddenDevPhones.length > 0 ||
+          legacyPhones.length > 0 ? (
+            <div className="phone-secondary-list">
+              {additionalPhones.map((phone) => (
+                <article className="phone-secondary-row" key={phone.id}>
+                  <div>
+                    <strong>{phone.displayName}</strong>
+                    <span>
+                      {phone.phoneNumber ??
+                        phone.providerInstanceId ??
+                        "No number yet"}
+                    </span>
+                  </div>
+                  <em>{phone.status}</em>
+                </article>
+              ))}
+              {hiddenDevPhones.length > 0 ? (
+                <span>
+                  {hiddenDevPhones.length} test route
+                  {hiddenDevPhones.length === 1 ? "" : "s"} hidden from the main
+                  view.
+                </span>
+              ) : null}
+              {legacyPhones.length > 0 ? (
+                <span>
+                  {legacyPhones.length} legacy route
+                  {legacyPhones.length === 1 ? "" : "s"} hidden from Core v1.
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+        </details>
+      ) : null}
     </section>
   );
 }
@@ -1608,11 +2051,17 @@ function Field({
   value,
   onChange,
   type = "text",
+  autoComplete,
+  placeholder,
+  required = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
+  autoComplete?: string;
+  placeholder?: string;
+  required?: boolean;
 }) {
   return (
     <label className="field">
@@ -1620,6 +2069,9 @@ function Field({
       <input
         value={value}
         type={type}
+        autoComplete={autoComplete}
+        placeholder={placeholder}
+        required={required}
         onChange={(event) => onChange(event.target.value)}
       />
     </label>
@@ -1704,9 +2156,56 @@ function ChannelContextMenu({
       }
   > = [
     { kind: "action", action: "open", label: "Open chat", icon: Inbox },
+    {
+      kind: "action",
+      action: "refresh",
+      label: "Refresh from WhatsApp",
+      icon: RefreshCcw,
+    },
+    ...(!state.channel.isMarkedUnread
+      ? ([
+          {
+            kind: "action" as const,
+            action: "mark-unread" as const,
+            label: "Mark as unread",
+            icon: MessageCircleMore,
+          },
+        ] as const)
+      : []),
+    { kind: "separator" },
+    {
+      kind: "action",
+      action: state.channel.isPinned ? "unpin" : "pin",
+      label: state.channel.isPinned ? "Unpin chat" : "Pin chat",
+      icon: state.channel.isPinned ? PinOff : Pin,
+    },
+    {
+      kind: "action",
+      action: state.channel.isMuted ? "unmute" : "mute",
+      label: state.channel.isMuted ? "Unmute chat" : "Mute chat",
+      icon: state.channel.isMuted ? Bell : BellOff,
+    },
+    {
+      kind: "action",
+      action: state.channel.status === "archived" ? "unarchive" : "archive",
+      label:
+        state.channel.status === "archived" ? "Unarchive chat" : "Archive chat",
+      icon: state.channel.status === "archived" ? ArchiveRestore : Archive,
+    },
     { kind: "separator" },
     { kind: "action", action: "copy-title", label: "Copy title", icon: Copy },
-    { kind: "action", action: "copy-id", label: "Copy ID", icon: Clipboard },
+    {
+      kind: "action",
+      action: "copy-provider-id",
+      label: "Copy WhatsApp ID",
+      icon: Clipboard,
+    },
+    {
+      kind: "action",
+      action: "copy-clario-id",
+      label: "Copy ClarioDesk ID",
+      icon: Clipboard,
+    },
   ];
 
   useEffect(() => {
@@ -1714,10 +2213,34 @@ function ChannelContextMenu({
       if (!menuRef.current?.contains(event.target as Node)) onClose();
     }
     function handleKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (!menuRef.current) return;
+      const buttons = Array.from(
+        menuRef.current.querySelectorAll<HTMLButtonElement>("button"),
+      );
+      if (!buttons.length) return;
+      const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      const target =
+        event.key === "ArrowDown"
+          ? buttons[(current + 1) % buttons.length]
+          : event.key === "ArrowUp"
+            ? buttons[(current - 1 + buttons.length) % buttons.length]
+            : event.key === "Home"
+              ? buttons[0]
+              : event.key === "End"
+                ? buttons.at(-1)
+                : undefined;
+      if (target) {
+        event.preventDefault();
+        target.focus();
+      }
     }
     window.addEventListener("pointerdown", handlePointer);
     window.addEventListener("keydown", handleKey);
+    menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
     return () => {
       window.removeEventListener("pointerdown", handlePointer);
       window.removeEventListener("keydown", handleKey);
@@ -1749,7 +2272,7 @@ function ChannelContextMenu({
             role="menuitem"
             onClick={() => void onAction(item.action, state.channel)}
           >
-            <Icon size={18} aria-hidden="true" />
+            <Icon size={16} aria-hidden="true" />
             <span>{item.label}</span>
           </button>
         );
@@ -1815,13 +2338,20 @@ function toUiChannels(
     "qr_required";
   return channels.map((channel) => ({
     id: channel.id,
-    title: channel.title ?? "Untitled WhatsApp group",
+    providerChatId: channel.providerChatId,
+    title:
+      channel.title ??
+      (channel.channelType === "group" ? "WhatsApp group" : "Unknown contact"),
+    avatarUrl: channel.avatarUrl ?? undefined,
     channelType: channel.channelType,
     clientId: channel.clientId ?? undefined,
     client: channel.clientName ?? "",
     projectId: channel.projectId ?? undefined,
     project: channel.projectName ?? undefined,
-    status: channel.status === "archived" ? "muted" : channel.status,
+    status: channel.status,
+    isPinned: channel.isPinned,
+    isMuted: channel.isMuted,
+    isMarkedUnread: channel.isMarkedUnread,
     phoneStatus:
       phoneStatus === "connected" ||
       phoneStatus === "syncing" ||
@@ -1832,11 +2362,14 @@ function toUiChannels(
       channel.lastMessageAt ?? channel.awaitingResponseSince ?? null,
     lastMessage: channel.awaitingResponseSince
       ? "Waiting for support response"
-      : "No recent preview",
+      : (channel.lastMessage ??
+        (channel.lastMessageType
+          ? `[${channel.lastMessageType.replaceAll("_", " ")}]`
+          : "No messages yet")),
     lastTime: channel.lastMessageAt
       ? formatTime(channel.lastMessageAt)
       : "No messages",
-    unread: channel.awaitingResponseSince ? 1 : 0,
+    unread: channel.isMarkedUnread || channel.awaitingResponseSince ? 1 : 0,
     openTickets: tickets.filter(
       (ticket) => ticket.channelId === channel.id && ticket.status !== "closed",
     ).length,
@@ -1850,7 +2383,13 @@ function toUiMessage(message: ApiMessage): Message {
   return {
     id: message.id,
     kind: message.status === "deleted" ? "deleted" : message.direction,
-    sender: message.sentByType,
+    sender:
+      message.senderName ??
+      (message.sentByType === "dashboard_agent"
+        ? "Support agent"
+        : message.sentByType === "client_user"
+          ? "Customer"
+          : "WhatsApp user"),
     body: message.body ?? `[${message.messageType}]`,
     media: message.media ?? [],
     timestampAt: message.providerTimestamp,
@@ -1877,19 +2416,13 @@ function filterChannels(
   view: ChannelView,
 ): Channel[] {
   const q = query.trim().toLowerCase();
-  return channels.filter((channel) => {
+  return filterChannelsByView(channels, view).filter((channel) => {
     const matchesQuery =
       !q ||
       `${channel.title} ${channel.client} ${channel.project ?? ""}`
         .toLowerCase()
         .includes(q);
-    const matchesView =
-      view === "all" ||
-      (view === "groups" && channel.channelType === "group") ||
-      (view === "direct" && channel.channelType !== "group") ||
-      (view === "unread" && channel.unread > 0);
-    if (channel.status === "muted") return false;
-    return matchesQuery && matchesView;
+    return matchesQuery;
   });
 }
 

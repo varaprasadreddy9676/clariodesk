@@ -37,6 +37,10 @@ const CAPABILITIES: GatewayCapabilities = {
   supportsMediaDownload: true,
   supportsMessageDeleteEvents: true,
   supportsOfficialTemplates: false,
+  supportsChatPin: false,
+  supportsChatMute: false,
+  supportsChatArchive: false,
+  supportsMarkUnread: false,
 };
 
 /** History/backlog event names — their messages must be flagged backfill. */

@@ -29,7 +29,10 @@ async function main(): Promise<void> {
   const db = getDb(config.DATABASE_URL);
 
   const http = createServer();
-  const io = new Server(http, { cors: { origin: true } });
+  const allowedOrigins = config.CORS_ORIGINS
+    ? config.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
+    : false;
+  const io = new Server(http, { cors: { origin: allowedOrigins, credentials: true } });
   const states = new WeakMap<Socket, SocketState>();
 
   io.use((socket, next) => {

@@ -1,16 +1,26 @@
 import "dotenv/config";
 import { HttpApp, requireObject } from "./http.js";
-import { SessionManager, type GatewayMessage } from "./session-manager.js";
+import {
+  SessionManager,
+  type ChatStateAction,
+  type GatewayMessage,
+} from "./session-manager.js";
 
 const port = readInt(process.env.CLARIO_GATEWAY_PORT, 2786);
-const apiKey = process.env.CLARIO_GATEWAY_API_KEY ?? "dev-clario-gateway-key";
+
+// Fail fast on missing required secrets rather than silently disabling features
+const apiKey = process.env.CLARIO_GATEWAY_API_KEY;
+if (!apiKey) throw new Error("CLARIO_GATEWAY_API_KEY is required");
+const webhookSecretRaw =
+  process.env.CLARIO_GATEWAY_WEBHOOK_SECRET ??
+  process.env.GATEWAY_WEBHOOK_SECRET;
+if (!webhookSecretRaw) throw new Error("CLARIO_GATEWAY_WEBHOOK_SECRET is required");
+const webhookSecret: string = webhookSecretRaw;
+
 const dataDir = process.env.CLARIO_GATEWAY_DATA_DIR ?? "./.clario-gateway";
 const webhookBaseUrl =
   process.env.CLARIO_API_WEBHOOK_BASE_URL ??
   `http://localhost:${process.env.API_PORT ?? "4000"}/api`;
-const webhookSecret =
-  process.env.CLARIO_GATEWAY_WEBHOOK_SECRET ??
-  process.env.GATEWAY_WEBHOOK_SECRET;
 
 const manager = new SessionManager({
   dataDir,
@@ -69,9 +79,38 @@ app.post("/sessions/:id/logout", async ({ params }) => {
 app.get("/sessions/:id/groups", ({ params }) =>
   manager.get(requiredParam(params, "id")).groups(),
 );
+app.post("/sessions/:id/contacts/resolve", ({ params, body }) => {
+  const input = requireObject(body);
+  return manager
+    .get(requiredParam(params, "id"))
+    .resolveNumber(requiredString(input, "phoneNumber"));
+});
+app.post("/sessions/:id/groups", ({ params, body }) => {
+  const input = requireObject(body);
+  return manager
+    .get(requiredParam(params, "id"))
+    .createGroup(
+      requiredString(input, "title"),
+      requiredStringArray(input, "participantIds"),
+    );
+});
 app.get("/sessions/:id/chats", ({ params }) =>
   manager.get(requiredParam(params, "id")).chats(),
 );
+app.get("/sessions/:id/chats/:chatId", ({ params }) =>
+  manager
+    .get(requiredParam(params, "id"))
+    .chat(requiredParam(params, "chatId")),
+);
+app.post("/sessions/:id/chats/:chatId/actions", ({ params, body }) => {
+  const input = requireObject(body);
+  return manager
+    .get(requiredParam(params, "id"))
+    .setChatState(
+      requiredParam(params, "chatId"),
+      parseChatStateAction(input),
+    );
+});
 app.get("/sessions/:id/chats/:chatId/messages", ({ params, query }) => {
   return manager
     .get(requiredParam(params, "id"))
@@ -103,6 +142,15 @@ app.post("/sessions/:id/messages/reply", ({ params, body }) => {
       requiredString(input, "text"),
     );
 });
+app.post("/sessions/:id/messages/react", ({ params, body }) => {
+  const input = requireObject(body);
+  return manager
+    .get(requiredParam(params, "id"))
+    .react(
+      requiredString(input, "messageId"),
+      requiredString(input, "reaction"),
+    );
+});
 app.get(
   "/sessions/:id/chats/:chatId/messages/:messageId/media",
   ({ params }) => {
@@ -118,19 +166,32 @@ app.get(
 app.listen(port);
 console.log(`clario gateway listening on :${port}`);
 
+async function shutdown(signal: string): Promise<void> {
+  console.log(`gateway received ${signal} — stopping all sessions`);
+  const sessions = manager.list();
+  await Promise.all(
+    sessions.map((s) =>
+      manager
+        .get(s.id)
+        .stop()
+        .catch((err: unknown) =>
+          console.error(`failed to stop session ${s.id}:`, err),
+        ),
+    ),
+  );
+  process.exit(0);
+}
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));
+
 async function forwardWebhook(
   sessionId: string,
   message: GatewayMessage,
 ): Promise<void> {
-  if (!webhookSecret) {
-    console.error(
-      "gateway webhook forwarding disabled: missing webhook secret",
-    );
-    return;
-  }
   const url = `${webhookBaseUrl.replace(/\/+$/, "")}/gateway-webhooks/clario_gateway/${encodeURIComponent(sessionId)}`;
+  const MAX_ATTEMPTS = 12; // up to ~60s total — covers a full API restart
   let lastError = "unknown error";
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -145,10 +206,13 @@ async function forwardWebhook(
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
     }
-    if (attempt < 3) await sleep(250 * attempt);
+    if (attempt < MAX_ATTEMPTS) {
+      const delay = Math.min(250 * Math.pow(2, attempt - 1), 8000);
+      await sleep(delay);
+    }
   }
   console.error(
-    `gateway webhook delivery failed for session ${sessionId}: ${lastError}`,
+    `gateway webhook delivery failed for session ${sessionId} after ${MAX_ATTEMPTS} attempts: ${lastError}`,
   );
 }
 
@@ -169,6 +233,23 @@ function stringField(
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function requiredStringArray(
+  input: Record<string, unknown>,
+  key: string,
+): string[] {
+  const value = input[key];
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${key} must be a non-empty array`);
+  }
+  const strings = value.map((item) =>
+    typeof item === "string" ? item.trim() : "",
+  );
+  if (strings.some((item) => !item)) {
+    throw new Error(`${key} must contain only non-empty strings`);
+  }
+  return strings;
+}
+
 function requiredString(input: Record<string, unknown>, key: string): string {
   const value = stringField(input, key);
   if (!value) throw new Error(`${key} is required`);
@@ -178,5 +259,37 @@ function requiredString(input: Record<string, unknown>, key: string): string {
 function requiredParam(params: Record<string, string>, key: string): string {
   const value = params[key];
   if (!value) throw new Error(`${key} parameter is required`);
+  return value;
+}
+
+function parseChatStateAction(
+  input: Record<string, unknown>,
+): ChatStateAction {
+  switch (requiredString(input, "action")) {
+    case "pin":
+      return { action: "pin", pinned: requiredBoolean(input, "pinned") };
+    case "mute":
+      return { action: "mute", muted: requiredBoolean(input, "muted") };
+    case "archive":
+      return {
+        action: "archive",
+        archived: requiredBoolean(input, "archived"),
+      };
+    case "mark_unread":
+      if (input.markedUnread !== true) {
+        throw new Error("markedUnread must be true");
+      }
+      return { action: "mark_unread", markedUnread: true };
+    default:
+      throw new Error("Unsupported chat action");
+  }
+}
+
+function requiredBoolean(
+  input: Record<string, unknown>,
+  key: string,
+): boolean {
+  const value = input[key];
+  if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
   return value;
 }

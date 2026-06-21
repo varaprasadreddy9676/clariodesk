@@ -173,9 +173,9 @@ export const messageMedia = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    messageId: uuid("message_id")
-      .notNull()
-      .references(() => messages.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id").references(() => messages.id, {
+      onDelete: "cascade",
+    }),
     clientId: uuid("client_id").references(() => clients.id, {
       onDelete: "set null",
     }),
@@ -245,12 +245,14 @@ export const outboxMessages = pgTable(
     failureReason: text("failure_reason"),
     /** Returned by the adapter on send; used to merge the inbound echo (§8.4). */
     providerMessageId: text("provider_message_id"),
+    idempotencyKey: uuid("idempotency_key"),
     retryCount: integer("retry_count").notNull().default(0),
     ...timestamps,
   },
   (t) => [
     index("outbox_ws_status_idx").on(t.workspaceId, t.status),
     index("outbox_send_after_idx").on(t.sendAfter),
+    uniqueIndex("outbox_ws_idempotency_uq").on(t.workspaceId, t.idempotencyKey),
     // Fast lookup when reconciling an inbound echo to its outbox row.
     index("outbox_provider_msg_idx").on(
       t.workspaceId,

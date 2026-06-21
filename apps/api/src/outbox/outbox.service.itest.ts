@@ -12,6 +12,7 @@ import type { RealtimePublisher } from "@clariodesk/events";
 import type { AuthUser } from "../common/auth-context.js";
 import type { AuditService } from "../common/audit.service.js";
 import type { QueueRegistry } from "../core/queues.js";
+import type { ObjectStorage } from "@clariodesk/storage";
 import { AccessService } from "../common/access.service.js";
 import { OutboxService } from "./outbox.service.js";
 
@@ -48,9 +49,13 @@ function makeService() {
   const config = {
     SEND_DELAY_MS: 3000,
   } as AppConfig;
+  const storage = {
+    putMedia: vi.fn().mockResolvedValue(undefined),
+  } as unknown as ObjectStorage;
   return {
     service: new OutboxService(
       db,
+      storage,
       config,
       queueRegistry(),
       realtime,
@@ -136,6 +141,56 @@ function agent(workspaceId: string, userId: string): AuthUser {
 }
 
 describe("OutboxService failure paths (integration)", () => {
+  it("queues a validated outbound attachment", async () => {
+    const { workspaceId, adminId, mappedChannelId } = await seedWorkspace();
+    const { service } = makeService();
+
+    const result = await service.sendMedia(admin(workspaceId, adminId), {
+      channelId: mappedChannelId,
+      body: "Screenshot",
+      fileName: "proof.png",
+      mimeType: "image/png",
+      mediaBase64: Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]).toString("base64"),
+      idempotencyKey: randomUUID(),
+    });
+
+    expect(result.outboxId).toEqual(expect.any(String));
+  });
+
+  it("rejects an attachment whose bytes do not match its MIME type", async () => {
+    const { workspaceId, adminId, mappedChannelId } = await seedWorkspace();
+    const { service } = makeService();
+
+    await expect(
+      service.sendMedia(admin(workspaceId, adminId), {
+        channelId: mappedChannelId,
+        body: "Spoofed",
+        fileName: "spoof.png",
+        mimeType: "image/png",
+        mediaBase64: Buffer.from("not-a-png").toString("base64"),
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toThrow("does not match");
+  });
+
+  it("returns the existing outbox row for a repeated idempotency key", async () => {
+    const { workspaceId, adminId, mappedChannelId } = await seedWorkspace();
+    const { service } = makeService();
+    const input = {
+      channelId: mappedChannelId,
+      body: "Reply once",
+      useSendDelay: true,
+      idempotencyKey: randomUUID(),
+    };
+
+    const first = await service.send(admin(workspaceId, adminId), input);
+    const second = await service.send(admin(workspaceId, adminId), input);
+
+    expect(second.outboxId).toBe(first.outboxId);
+  });
+
   it("allows replies even when the channel is unmapped", async () => {
     const { workspaceId, adminId, unmappedChannelId } = await seedWorkspace();
     const { service } = makeService();

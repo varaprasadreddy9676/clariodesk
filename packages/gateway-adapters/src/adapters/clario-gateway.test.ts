@@ -48,6 +48,7 @@ describe("ClarioGatewayAdapter", () => {
         title: "Client Support",
         channelType: "group",
         participantCount: 9,
+        avatarUrl: null,
       },
     ]);
   });
@@ -56,7 +57,11 @@ describe("ClarioGatewayAdapter", () => {
     const fetchFn = vi.fn(async () =>
       json([
         { id: "120363@g.us", name: "Client Support", participantsCount: 9 },
-        { id: "9199@c.us", name: "Client Owner" },
+        {
+          id: "9199@c.us",
+          name: "Client Owner",
+          avatarUrl: "https://example.test/avatar.jpg",
+        },
       ]),
     ) as unknown as typeof fetch;
     const adapter = new ClarioGatewayAdapter({
@@ -73,14 +78,93 @@ describe("ClarioGatewayAdapter", () => {
         title: "Client Support",
         channelType: "group",
         participantCount: 9,
+        avatarUrl: null,
       },
       {
         providerChatId: "9199@c.us",
         title: "Client Owner",
         channelType: "direct",
         participantCount: undefined,
+        avatarUrl: "https://example.test/avatar.jpg",
       },
     ]);
+  });
+
+  it("fetches confirmed metadata for one chat", async () => {
+    const fetchFn = vi.fn(async () =>
+      json({
+        id: "120363@g.us",
+        name: "Client Support",
+        channelType: "group",
+        avatarUrl: null,
+        participantsCount: 9,
+        isPinned: true,
+        isMuted: false,
+        isArchived: false,
+      }),
+    ) as unknown as typeof fetch;
+    const adapter = new ClarioGatewayAdapter({
+      baseUrl: "http://gateway",
+      apiKey: "key",
+      fetchFn,
+    });
+
+    await expect(
+      adapter.fetchChat?.({
+        providerInstanceId: "phone-1",
+        providerChatId: "120363@g.us",
+      }),
+    ).resolves.toEqual({
+      providerChatId: "120363@g.us",
+      title: "Client Support",
+      channelType: "group",
+      avatarUrl: null,
+      participantCount: 9,
+      isPinned: true,
+      isMuted: false,
+      isArchived: false,
+    });
+    expect(fetchFn).toHaveBeenCalledWith(
+      "http://gateway/sessions/phone-1/chats/120363%40g.us",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it.each([
+    [{ action: "pin", pinned: true }],
+    [{ action: "mute", muted: false }],
+    [{ action: "archive", archived: true }],
+    [{ action: "mark_unread", markedUnread: true }],
+  ] as const)("sets a confirmed chat target state for %o", async (action) => {
+    const fetchFn = vi.fn(async () =>
+      json({
+        id: "120363@g.us",
+        name: "Client Support",
+        channelType: "group",
+        isPinned: action.action === "pin" ? action.pinned : false,
+        isMuted: action.action === "mute" ? action.muted : false,
+        isArchived: action.action === "archive" ? action.archived : false,
+      }),
+    ) as unknown as typeof fetch;
+    const adapter = new ClarioGatewayAdapter({
+      baseUrl: "http://gateway",
+      apiKey: "key",
+      fetchFn,
+    });
+
+    await adapter.setChatState?.({
+      providerInstanceId: "phone-1",
+      providerChatId: "120363@g.us",
+      ...action,
+    });
+
+    expect(fetchFn).toHaveBeenCalledWith(
+      "http://gateway/sessions/phone-1/chats/120363%40g.us/actions",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(action),
+      }),
+    );
   });
 
   it("fetches chat messages and maps timestamps/direction", async () => {
@@ -217,6 +301,90 @@ describe("ClarioGatewayAdapter", () => {
       expect.objectContaining({
         method: "POST",
         body: expect.stringContaining('"chatId":"120363@g.us"'),
+      }),
+    );
+  });
+
+  it("resolves a WhatsApp number through the owned gateway", async () => {
+    const fetchFn = vi.fn(async () =>
+      json({ registered: true, providerContactId: "919876543210@c.us" }),
+    ) as unknown as typeof fetch;
+    const adapter = new ClarioGatewayAdapter({
+      baseUrl: "http://gateway",
+      apiKey: "key",
+      fetchFn,
+    });
+
+    await expect(
+      adapter.resolveNumber?.({
+        providerInstanceId: "phone-1",
+        phoneNumber: "+91 98765 43210",
+      }),
+    ).resolves.toEqual({
+      registered: true,
+      providerContactId: "919876543210@c.us",
+    });
+    expect(fetchFn).toHaveBeenCalledWith(
+      "http://gateway/sessions/phone-1/contacts/resolve",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ phoneNumber: "+91 98765 43210" }),
+      }),
+    );
+  });
+
+  it("creates a WhatsApp group through the owned gateway", async () => {
+    const fetchFn = vi.fn(async () =>
+      json({ providerChatId: "120363000000@g.us" }),
+    ) as unknown as typeof fetch;
+    const adapter = new ClarioGatewayAdapter({
+      baseUrl: "http://gateway",
+      apiKey: "key",
+      fetchFn,
+    });
+
+    await expect(
+      adapter.createGroup?.({
+        providerInstanceId: "phone-1",
+        title: "Acme Support",
+        participantIds: ["919876543210@c.us"],
+      }),
+    ).resolves.toEqual({ providerChatId: "120363000000@g.us" });
+    expect(fetchFn).toHaveBeenCalledWith(
+      "http://gateway/sessions/phone-1/groups",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          title: "Acme Support",
+          participantIds: ["919876543210@c.us"],
+        }),
+      }),
+    );
+  });
+
+  it("reacts to a message through the owned gateway endpoint", async () => {
+    const fetchFn = vi.fn(async () =>
+      json({ ok: true }),
+    ) as unknown as typeof fetch;
+    const adapter = new ClarioGatewayAdapter({
+      baseUrl: "http://gateway",
+      apiKey: "key",
+      fetchFn,
+    });
+
+    await expect(
+      adapter.reactToMessage?.({
+        providerInstanceId: "phone-1",
+        providerChatId: "120363@g.us",
+        providerMessageId: "MSG-1",
+        reaction: "👍",
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(fetchFn).toHaveBeenCalledWith(
+      "http://gateway/sessions/phone-1/messages/react",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"reaction":"👍"'),
       }),
     );
   });

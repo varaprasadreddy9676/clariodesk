@@ -51,6 +51,10 @@ export const phoneInstances = pgTable(
       t.adapterType,
       t.providerInstanceId,
     ),
+    uniqueIndex("phone_instances_provider_global_uq").on(
+      t.adapterType,
+      t.providerInstanceId,
+    ),
   ],
 );
 

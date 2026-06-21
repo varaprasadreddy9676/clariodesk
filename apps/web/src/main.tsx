@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App.js";
 import "./styles.css";
 
-if (window.location.pathname.replace(/\/+$/, "") === "/event-gateway") {
+if (window.location.pathname !== "/") {
   window.history.replaceState(
     null,
     "",

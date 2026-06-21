@@ -1,7 +1,13 @@
 import type { Job } from "bullmq";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { schema } from "@clariodesk/db";
 import { evaluateSendPolicy } from "@clariodesk/policy-engine";
+import type { ObjectStorage } from "@clariodesk/storage";
+import type {
+  GatewaySendResult,
+  WhatsAppGatewayAdapter,
+} from "@clariodesk/gateway-adapters";
+import type { MessageType } from "@clariodesk/types";
 import type { WorkerDeps } from "../context.js";
 import type { OutboxSendJob } from "../queues.js";
 
@@ -19,17 +25,23 @@ export function makeOutboxSendProcessor(deps: WorkerDeps) {
       job_id: job.id,
     });
 
-    const rows = await deps.db
-      .select()
-      .from(schema.outboxMessages)
-      .where(eq(schema.outboxMessages.id, outboxId))
-      .limit(1);
-    const outbox = rows[0];
+    // Atomic claim: only succeed if the row is still pending/waiting.
+    // This prevents double-send when BullMQ stalls and re-queues the job or
+    // when multiple worker processes run concurrently.
+    const [outbox] = await deps.db
+      .update(schema.outboxMessages)
+      .set({ status: "sending", updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.outboxMessages.id, outboxId),
+          inArray(schema.outboxMessages.status, ["pending", "waiting_delay"]),
+        ),
+      )
+      .returning();
     if (!outbox) {
-      log.warn({ outboxId }, "outbox row missing");
+      log.info({ outboxId }, "outbox already claimed, sent, or cancelled — skipping");
       return;
     }
-    if (outbox.status === "sent" || outbox.status === "cancelled") return;
 
     const phone = await deps.db
       .select()
@@ -91,19 +103,28 @@ export function makeOutboxSendProcessor(deps: WorkerDeps) {
     }
 
     try {
-      await deps.db
-        .update(schema.outboxMessages)
-        .set({ status: "sending", updatedAt: new Date() })
-        .where(eq(schema.outboxMessages.id, outboxId));
-
+      // Status already set to "sending" by the atomic claim above.
       const adapter = deps.getAdapterForPhone(phone[0]);
-      const result = await adapter.sendText({
+      const [media] = outbox.mediaId
+        ? await deps.db
+            .select({
+              storageKey: schema.messageMedia.storageKey,
+              mimeType: schema.messageMedia.mimeType,
+              fileName: schema.messageMedia.fileName,
+            })
+            .from(schema.messageMedia)
+            .where(eq(schema.messageMedia.id, outbox.mediaId))
+            .limit(1)
+        : [undefined];
+      const result = await sendProviderMessage({
+        adapter,
+        storage: deps.storage,
         providerInstanceId: phone[0].providerInstanceId,
         providerChatId: channel[0].providerChatId,
         body: outbox.body ?? "",
-        ...(outbox.quotedMessageId
-          ? { quotedProviderMessageId: outbox.quotedMessageId }
-          : {}),
+        messageType: outbox.messageType,
+        quotedMessageId: outbox.quotedMessageId,
+        media,
       });
 
       // Store the provider id so the inbound echo merges into THIS row (§8.4).
@@ -116,7 +137,7 @@ export function makeOutboxSendProcessor(deps: WorkerDeps) {
           updatedAt: sentAt,
         })
         .where(eq(schema.outboxMessages.id, outboxId));
-      await deps.db
+      const [persistedMessage] = await deps.db
         .insert(schema.messages)
         .values({
           workspaceId: outbox.workspaceId,
@@ -140,7 +161,29 @@ export function makeOutboxSendProcessor(deps: WorkerDeps) {
           ticketAutoCreateEligible: false,
           status: "received",
         })
-        .onConflictDoNothing();
+        .onConflictDoNothing()
+        .returning({ id: schema.messages.id });
+      let persistedMessageId = persistedMessage?.id;
+      if (!persistedMessageId) {
+        const [existingMessage] = await deps.db
+          .select({ id: schema.messages.id })
+          .from(schema.messages)
+          .where(
+            and(
+              eq(schema.messages.workspaceId, outbox.workspaceId),
+              eq(schema.messages.channelId, outbox.channelId),
+              eq(schema.messages.providerMessageId, result.providerMessageId),
+            ),
+          )
+          .limit(1);
+        persistedMessageId = existingMessage?.id;
+      }
+      if (outbox.mediaId && persistedMessageId) {
+        await deps.db
+          .update(schema.messageMedia)
+          .set({ messageId: persistedMessageId, updatedAt: sentAt })
+          .where(eq(schema.messageMedia.id, outbox.mediaId));
+      }
       await deps.db
         .update(schema.channels)
         .set({
@@ -174,6 +217,50 @@ export function makeOutboxSendProcessor(deps: WorkerDeps) {
       throw err; // allow BullMQ retry/backoff
     }
   };
+}
+
+export async function sendProviderMessage(input: {
+  adapter: WhatsAppGatewayAdapter;
+  storage: ObjectStorage;
+  providerInstanceId: string;
+  providerChatId: string;
+  body: string;
+  messageType: MessageType;
+  quotedMessageId: string | null;
+  media?: {
+    storageKey: string | null;
+    mimeType: string | null;
+    fileName: string | null;
+  };
+}): Promise<GatewaySendResult> {
+  if (input.messageType === "text") {
+    return input.adapter.sendText({
+      providerInstanceId: input.providerInstanceId,
+      providerChatId: input.providerChatId,
+      body: input.body,
+      ...(input.quotedMessageId
+        ? { quotedProviderMessageId: input.quotedMessageId }
+        : {}),
+    });
+  }
+  if (!input.media?.storageKey || !input.media.mimeType) {
+    throw new Error("Outbound media metadata is missing");
+  }
+  const bytes = await input.storage.getMedia(input.media.storageKey);
+  if (!bytes.byteLength || bytes.byteLength > 16 * 1024 * 1024) {
+    throw new Error("Outbound media must be between 1 byte and 16 MB");
+  }
+  return input.adapter.sendMedia({
+    providerInstanceId: input.providerInstanceId,
+    providerChatId: input.providerChatId,
+    mediaBase64: Buffer.from(bytes).toString("base64"),
+    mimeType: input.media.mimeType,
+    fileName: input.media.fileName ?? undefined,
+    caption: input.body || undefined,
+    ...(input.quotedMessageId
+      ? { quotedProviderMessageId: input.quotedMessageId }
+      : {}),
+  });
 }
 
 async function fail(deps: WorkerDeps, outboxId: string, reason: string) {

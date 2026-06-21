@@ -6,6 +6,7 @@ import {
   type NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import fastifyHelmet from "@fastify/helmet";
 import { loadConfig } from "@clariodesk/config";
 import { AppModule } from "./app.module.js";
 
@@ -24,25 +25,41 @@ async function bootstrap(): Promise<void> {
     ? config.CORS_ORIGINS.split(",")
         .map((origin) => origin.trim())
         .filter(Boolean)
-    : true;
+    : false; // deny all cross-origin if not configured — production guard in loadConfig()
   app.enableCors({
     origin: origins,
     credentials: true,
   });
   app.enableShutdownHooks();
 
-  // OpenAPI: @nestjs/swagger introspects every controller/route. Bearer auth is
-  // declared so the docs UI can authorize and call protected endpoints.
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle("ClarioDesk API")
-    .setDescription("Core v1 API surface for WhatsApp group operations")
-    .setVersion("0.1.0")
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup("api/docs", app, document, {
-    swaggerOptions: { docExpansion: "list", deepLinking: true },
+  await app.register(fastifyHelmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameSrc: ["'none'"],
+      },
+    },
   });
+
+  // Swagger UI only in non-production environments
+  if (process.env.NODE_ENV !== "production") {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle("ClarioDesk API")
+      .setDescription("Core v1 API surface for WhatsApp group operations")
+      .setVersion("0.1.0")
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup("api/docs", app, document, {
+      swaggerOptions: { docExpansion: "list", deepLinking: true },
+    });
+  }
 
   await app.listen({ port: config.API_PORT, host: "0.0.0.0" });
   console.log(`clariodesk api listening on :${config.API_PORT}`);

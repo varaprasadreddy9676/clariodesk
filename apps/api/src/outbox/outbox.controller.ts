@@ -1,5 +1,10 @@
 import { Body, Controller, Param, Post, UseGuards } from "@nestjs/common";
-import { sendReplySchema, type SendReplyInput } from "@clariodesk/schemas";
+import {
+  sendMediaSchema,
+  sendReplySchema,
+  type SendMediaCommandInput,
+  type SendReplyInput,
+} from "@clariodesk/schemas";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard.js";
 import { CurrentUser } from "../common/current-user.decorator.js";
 import type { AuthUser } from "../common/auth-context.js";
@@ -17,6 +22,14 @@ export class OutboxController {
     @Body(new ZodValidationPipe(sendReplySchema)) body: SendReplyInput,
   ) {
     return this.outbox.send(user, body);
+  }
+
+  @Post("media")
+  sendMedia(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(sendMediaSchema)) body: SendMediaCommandInput,
+  ) {
+    return this.outbox.sendMedia(user, body);
   }
 
   @Post(":id/cancel")

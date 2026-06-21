@@ -42,10 +42,31 @@ export const sendReplySchema = z.object({
   channelId: z.string().uuid(),
   body: z.string().min(1).max(4096),
   quotedMessageId: z.string().uuid().optional(),
+  idempotencyKey: z.string().uuid().optional(),
   /** Hold the message for the configured send-delay before dispatch. */
   useSendDelay: z.boolean().default(true),
 });
 export type SendReplyInput = z.infer<typeof sendReplySchema>;
+
+export const sendMediaSchema = z.object({
+  channelId: z.string().uuid(),
+  body: z.string().max(4096).default(""),
+  fileName: z.string().trim().min(1).max(255),
+  mimeType: z.enum([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "video/mp4",
+    "audio/mpeg",
+    "audio/ogg",
+    "application/pdf",
+    "text/plain",
+  ]),
+  mediaBase64: z.string().min(1),
+  idempotencyKey: z.string().uuid(),
+});
+export type SendMediaCommandInput = z.infer<typeof sendMediaSchema>;
 
 export const createInternalNoteSchema = z.object({
   channelId: z.string().uuid(),
@@ -99,6 +120,35 @@ export const createPhoneSchema = z.object({
 });
 export type CreatePhoneInput = z.infer<typeof createPhoneSchema>;
 
+const e164PhoneSchema = z
+  .string()
+  .trim()
+  .regex(
+    /^\+[1-9]\d{6,14}$/,
+    "Use an international number such as +919876543210",
+  );
+
+export const createDirectConversationSchema = z.object({
+  phoneInstanceId: z.string().uuid(),
+  phoneNumber: e164PhoneSchema,
+  initialMessage: z.string().trim().min(1).max(4096),
+  idempotencyKey: z.string().uuid(),
+});
+export type CreateDirectConversationInput = z.infer<
+  typeof createDirectConversationSchema
+>;
+
+export const createGroupConversationSchema = z.object({
+  phoneInstanceId: z.string().uuid(),
+  title: z.string().trim().min(1).max(100),
+  participantPhoneNumbers: z.array(e164PhoneSchema).min(1).max(50),
+  initialMessage: z.string().trim().max(4096).optional(),
+  idempotencyKey: z.string().uuid(),
+});
+export type CreateGroupConversationInput = z.infer<
+  typeof createGroupConversationSchema
+>;
+
 export const createUserSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(200),
@@ -120,6 +170,22 @@ export const assignChannelSchema = z.object({
   accessLevel: z.enum(["agent", "viewer"]).default("agent"),
 });
 export type AssignChannelInput = z.infer<typeof assignChannelSchema>;
+
+export const channelActionSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("mark_unread"),
+    markedUnread: z.literal(true),
+  }),
+  z.object({ action: z.literal("pin"), pinned: z.boolean() }),
+  z.object({ action: z.literal("mute"), muted: z.boolean() }),
+  z.object({ action: z.literal("archive"), archived: z.boolean() }),
+]);
+export type ChannelActionInput = z.infer<typeof channelActionSchema>;
+
+export const updateReadStateSchema = z.object({
+  markedUnread: z.literal(false),
+});
+export type UpdateReadStateInput = z.infer<typeof updateReadStateSchema>;
 
 export const cursorPaginationSchema = z.object({
   beforeProviderTimestampMs: z.coerce.number().int().optional(),

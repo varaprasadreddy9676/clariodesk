@@ -16,6 +16,7 @@ export type RealtimeEventType =
   | "ticket.updated"
   | "note.created"
   | "channel.updated"
+  | "channel.read_state_changed"
   | "phone.status_changed";
 
 /**

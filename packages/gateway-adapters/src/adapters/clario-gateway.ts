@@ -15,8 +15,14 @@ import type {
   GatewayMediaResult,
   GatewaySendResult,
   RawGatewayWebhook,
+  ReactToMessageInput,
+  ResolveNumberInput,
+  ResolveNumberResult,
+  CreateGroupInput,
+  CreateGroupResult,
   SendMediaInput,
   SendTextInput,
+  SetChatStateInput,
   WhatsAppGatewayAdapter,
 } from "../interface.js";
 
@@ -57,6 +63,21 @@ const CAPABILITIES: GatewayCapabilities = {
   supportsMediaDownload: true,
   supportsMessageDeleteEvents: false,
   supportsOfficialTemplates: false,
+  supportsChatPin: true,
+  supportsChatMute: true,
+  supportsChatArchive: true,
+  supportsMarkUnread: true,
+};
+
+type GatewayChatPayload = {
+  id?: string;
+  name?: string | null;
+  avatarUrl?: string | null;
+  channelType?: "group" | "direct";
+  participantsCount?: number;
+  isPinned?: boolean;
+  isMuted?: boolean;
+  isArchived?: boolean;
 };
 
 export class ClarioGatewayAdapter implements WhatsAppGatewayAdapter {
@@ -134,9 +155,10 @@ export class ClarioGatewayAdapter implements WhatsAppGatewayAdapter {
   async fetchChats(input: {
     providerInstanceId: string;
   }): Promise<GatewayChat[]> {
-    const chats = await this.req<
-      Array<{ id?: string; name?: string | null; participantsCount?: number }>
-    >("GET", `/sessions/${encodeURIComponent(input.providerInstanceId)}/chats`);
+    const chats = await this.req<GatewayChatPayload[]>(
+      "GET",
+      `/sessions/${encodeURIComponent(input.providerInstanceId)}/chats`,
+    );
     return chats
       .filter(
         (
@@ -144,15 +166,37 @@ export class ClarioGatewayAdapter implements WhatsAppGatewayAdapter {
         ): chat is {
           id: string;
           name?: string | null;
+          avatarUrl?: string | null;
           participantsCount?: number;
+          isPinned?: boolean;
+          isMuted?: boolean;
+          isArchived?: boolean;
         } => Boolean(chat.id),
       )
-      .map((chat) => ({
-        providerChatId: chat.id,
-        title: chat.name ?? null,
-        channelType: chat.id.endsWith("@g.us") ? "group" : "direct",
-        participantCount: chat.participantsCount,
-      }));
+      .map(toGatewayChat);
+  }
+
+  async fetchChat(input: {
+    providerInstanceId: string;
+    providerChatId: string;
+  }): Promise<GatewayChat> {
+    const chat = await this.req<GatewayChatPayload>(
+      "GET",
+      `/sessions/${encodeURIComponent(input.providerInstanceId)}/chats/${encodeURIComponent(input.providerChatId)}`,
+    );
+    if (!chat.id) throw new Error("Clario Gateway chat response has no id");
+    return toGatewayChat(chat as GatewayChatPayload & { id: string });
+  }
+
+  async setChatState(input: SetChatStateInput): Promise<GatewayChat> {
+    const { providerInstanceId, providerChatId, ...action } = input;
+    const chat = await this.req<GatewayChatPayload>(
+      "POST",
+      `/sessions/${encodeURIComponent(providerInstanceId)}/chats/${encodeURIComponent(providerChatId)}/actions`,
+      action,
+    );
+    if (!chat.id) throw new Error("Clario Gateway chat response has no id");
+    return toGatewayChat(chat as GatewayChatPayload & { id: string });
   }
 
   async fetchGroups(input: {
@@ -189,6 +233,25 @@ export class ClarioGatewayAdapter implements WhatsAppGatewayAdapter {
       : { chatId: input.providerChatId, text: input.body };
     const res = await this.req<{ messageId?: string }>("POST", path, body);
     return { providerMessageId: res.messageId ?? crypto.randomUUID() };
+  }
+
+  async resolveNumber(input: ResolveNumberInput): Promise<ResolveNumberResult> {
+    return this.req(
+      "POST",
+      `/sessions/${encodeURIComponent(input.providerInstanceId)}/contacts/resolve`,
+      { phoneNumber: input.phoneNumber },
+    );
+  }
+
+  async createGroup(input: CreateGroupInput): Promise<CreateGroupResult> {
+    return this.req(
+      "POST",
+      `/sessions/${encodeURIComponent(input.providerInstanceId)}/groups`,
+      {
+        title: input.title,
+        participantIds: input.participantIds,
+      },
+    );
   }
 
   async sendMedia(input: SendMediaInput): Promise<GatewaySendResult> {
@@ -231,6 +294,18 @@ export class ClarioGatewayAdapter implements WhatsAppGatewayAdapter {
       mimeType: media.mimeType,
       fileName: media.fileName ?? undefined,
     };
+  }
+
+  async reactToMessage(input: ReactToMessageInput): Promise<{ ok: true }> {
+    return this.req(
+      "POST",
+      `/sessions/${encodeURIComponent(input.providerInstanceId)}/messages/react`,
+      {
+        chatId: input.providerChatId,
+        messageId: input.providerMessageId,
+        reaction: input.reaction,
+      },
+    );
   }
 
   normalizeWebhook(input: RawGatewayWebhook): NormalizedGatewayEvent[] {
@@ -295,6 +370,26 @@ export function clarioMessageToNormalizedEvent(
   isHistorySync: boolean,
 ): NormalizedGatewayEvent {
   return toNormalizedEvent(message, isHistorySync);
+}
+
+function toGatewayChat(
+  chat: GatewayChatPayload & { id: string },
+): GatewayChat {
+  return {
+    providerChatId: chat.id,
+    title: chat.name ?? null,
+    avatarUrl: chat.avatarUrl ?? null,
+    channelType:
+      chat.channelType ?? (chat.id.endsWith("@g.us") ? "group" : "direct"),
+    participantCount: chat.participantsCount,
+    ...(typeof chat.isPinned === "boolean"
+      ? { isPinned: chat.isPinned }
+      : {}),
+    ...(typeof chat.isMuted === "boolean" ? { isMuted: chat.isMuted } : {}),
+    ...(typeof chat.isArchived === "boolean"
+      ? { isArchived: chat.isArchived }
+      : {}),
+  };
 }
 
 function toGatewayChatMessage(

@@ -44,7 +44,7 @@ Everything else is phased after this support loop works:
   Embedded Signup, WABA/phone management, templates, Flows, opt-outs, delivery
   analytics, SSO, advanced RBAC, plugins, local/BYOK AI maturity.
 
-**Last updated:** 2026-06-20
+**Last updated:** 2026-06-21
 **Current phase:** Core backend workflows exist and the frontend is API-backed, but the product is
 not pilot-complete. The current frontend is a functional engineering workbench, not the final
 WhatsApp-quality shared inbox. Socket.io infrastructure exists, but end-to-end live sync was
@@ -52,9 +52,10 @@ blocked by gateway webhook configuration/identifier mismatches and by listening 
 messages. Those defects are patched; a real-phone end-to-end verification after a full stack
 restart is still required before live sync can be marked complete. Reconnect recovery, durable
 history sync, delivery/read state, and production UX remain active work.
-**Baseline:** ✅ `npm run build` clean · `npm test` = **82/82 unit**. Integration tests require an
-available Docker runtime; the current managed environment cannot access the Docker socket.
-Migrations: `0000` (24 tables) + `0001` (FTS GIN indexes) + `0004` (`clario_gateway` adapter enum).
+**Baseline:** ✅ `npm run build` and `npm run lint` clean · `npm test` = **115/115 unit** ·
+Docker-backed integration suite = **46/46** after synchronized chat actions and responsive mobile
+navigation. Migrations now run through `0010` (26 tables), including independent pin/mute/unread
+state and safe legacy-muted backfill.
 **All five runtimes** build: api, worker, realtime, scheduler, gateway.
 **Live E2E proof (this session):** infra → migrate → seed → booted all 4 runtimes, then verified:
 auth/JWT + guards (401s); webhook→raw event→enqueue→worker normalize→store; mapping boundary
@@ -72,6 +73,7 @@ Evolution/OpenWA experiments proved useful as references, but they are not expos
 phone setup path because external gateway behavior blocked reliable message-history import.
 ClarioDesk now has a first-party `apps/gateway` runtime and `clario_gateway` adapter with
 QR/status/group sync/recent message import/text send/reply/media send/media download contracts.
+Number validation and real WhatsApp group creation contracts are implemented and automated-tested.
 Legacy Evolution/OpenWA code may remain as local reference tests, but API creation, UI setup,
 worker runtime, README, env, and dev compose are now Clario Gateway oriented.
 **Next up:** prove real-phone bidirectional live sync, make gateway/session recovery durable, then
@@ -97,8 +99,8 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started · `[-]` deferred (
   “Connected” when only one layer is alive.
 - [x] Add polling fallback when Socket.io is unavailable and automatically reconcile after socket
   reconnection, browser focus, or wake from sleep.
-- [ ] Synchronize delivery/read receipts, edits, revokes, reactions, typing/presence, chat metadata,
-  archive/mute/pin state where the linked-device library exposes them.
+- [~] Synchronize delivery/read receipts, edits, revokes, reactions, typing/presence, and chat
+  metadata. Provider-confirmed archive/mute/pin and mark-unread target-state actions are implemented.
 - [ ] Add real-phone automated contract tests for inbound text, outbound phone reply, dashboard
   reply, media, reconnect, duplicate delivery, and offline recovery.
 
@@ -106,15 +108,21 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started · `[-]` deferred (
 
 - [ ] Establish real routes and URL state (`/inbox`, `/tickets`, `/phones`, selected chat/filter).
 - [ ] Replace whole-screen refetch state with a server-state cache and targeted optimistic updates.
-- [ ] WhatsApp-quality chat rows: avatar, sender/preview, accurate timestamp, unread count, draft,
-  typing/sending/error state, pin/mute/archive markers, and stable ordering without layout shifts.
+- [~] WhatsApp-quality chat rows: avatars, previews, timestamps, provider-confirmed pin/mute/archive
+  markers, explicit unread state, and deterministic pin/activity ordering are implemented. Draft,
+  typing, sending/error detail, and exact provider unread counts remain.
 - [ ] Production timeline: virtualized history, anchored pagination, correct initial scroll,
   unread divider, date separators, reply previews, reactions, delivery state, media gallery, and
   no whole-page scrolling.
-- [ ] Production composer: attachment upload, paste/drop, voice note, emoji, mentions, quoted reply,
-  edit/delete where supported, send progress, retry, and clear separation of Reply vs Private Note.
-- [ ] Responsive interaction model: collapsible/resizable desktop panes and predictable mobile
-  list → conversation → context navigation.
+- [~] Production composer: compact WhatsApp/Private Note modes, auto-growing input, emoji insertion,
+  attachment validation/upload, private object storage, outbox retry, and icon send are implemented.
+  Paste/drop, voice note, mentions, quoted reply, explicit retry UI, and supported edit/delete remain.
+- [~] New-conversation FAB: working New chat and New group dialogs, E.164 validation, authenticated
+  Clario Gateway commands, persisted idempotency, automatic channel creation, and responsive UI are
+  implemented and automated-tested. Live creation against approved recipients is still pending.
+- [~] Responsive interaction model: desktop context/sidebar controls and predictable mobile
+  list → conversation → back navigation with touch actions and bottom app navigation are implemented.
+  Resizable desktop panes and a mobile context-detail route remain.
 - [ ] Shared design system tokens and primitives for typography, spacing, controls, menus, dialogs,
   skeletons, empty/error/offline states, toasts, and accessibility.
 - [ ] Keyboard navigation, focus management, screen-reader labels, reduced motion, and contrast QA.
@@ -171,7 +179,8 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started · `[-]` deferred (
 ## 3. Gateway adapters (`@clariodesk/gateway-adapters`) — P1
 
 - [x] `WhatsAppGatewayAdapter` interface + capability matrix
-- [x] First-party `clario_gateway` adapter: status, QR/session connect, group sync, recent message fetch, text send/reply, media send/download; unit-tested
+- [x] First-party `clario_gateway` adapter: status, QR/session connect, chat sync, recent message fetch,
+  number validation, direct send, real group creation, text send/reply, media send/download; unit-tested
 - [-] Evolution adapter/reference code — retained only as non-product reference, not exposed in Core v1 runtime/UI
 - [-] OpenWA adapter/reference code — retained only as non-product reference, not exposed in Core v1 runtime/UI
 - [x] Unit tests for Clario Gateway text/history/media and reference adapter normalization
@@ -279,10 +288,15 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started · `[-]` deferred (
 - [x] Timeline sync action: queues recent gateway message import for the selected channel
 - [x] Phone setup page is Clario Gateway only; legacy OpenWA/Evolution rows are hidden from Core v1 runtime
 - [x] Message/note context menu with right-click actions (reply, private note, create ticket, copy/copy-id, refresh; future actions disabled)
-- [x] Channel row context menu with right-click actions (open chat, map group, sync messages, copy title/copy ID)
+- [x] Compact channel-row actions menu for right-click, keyboard, and touch: open, refresh,
+  mark unread, pin/unpin, mute/unmute, archive/unarchive, copy title, WhatsApp ID, and ClarioDesk ID.
+  Provider-dependent actions confirm through Clario Gateway before local persistence.
 - [x] Sidebar/inbox channel list — loads permission-scoped API channels; search and view filters work
 - [x] Shared inbox timeline — loads cursor API timeline for active channel
-- [x] External reply composer + internal note composer — calls outbox/note APIs; replies work without forcing mapping
+- [x] Compact WhatsApp-style external composer + private-note mode — emoji and attachment controls are
+  functional; outbound media uses private storage and the worker outbox rather than browser-to-gateway calls
+- [x] New conversation FAB and dialogs — New chat requires and sends the first message; New group
+  validates participants and creates the provider group through Clario Gateway
 - [x] Ticket side panel tabs — context tabs are stateful; ticket rows use API data
 - [x] Tickets page — list + status update
 - [x] Search page — calls search API

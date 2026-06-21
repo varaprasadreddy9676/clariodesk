@@ -14,6 +14,7 @@ import { MediaModule } from "./media/media.module.js";
 import { SearchModule } from "./search/search.module.js";
 import { OpsModule } from "./ops/ops.module.js";
 import { HealthController } from "./health.controller.js";
+import { ConversationsModule } from "./conversations/conversations.module.js";
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { HealthController } from "./health.controller.js";
     MediaModule,
     SearchModule,
     OpsModule,
+    ConversationsModule,
   ],
   controllers: [HealthController],
 })

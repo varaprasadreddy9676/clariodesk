@@ -43,6 +43,41 @@
       "when": 1781432619183,
       "tag": "0005_nosy_sasquatch",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782019076948,
+      "tag": "0006_sweet_natasha_romanoff",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782019546693,
+      "tag": "0007_cold_stellaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782020569110,
+      "tag": "0008_hard_saracen",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782020927971,
+      "tag": "0009_huge_microbe",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782050147676,
+      "tag": "0010_sticky_thunderbolt_ross",
+      "breakpoints": true
     }
   ]
 }

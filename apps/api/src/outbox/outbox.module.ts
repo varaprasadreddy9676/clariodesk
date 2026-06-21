@@ -7,5 +7,6 @@ import { OutboxService } from "./outbox.service.js";
   imports: [AuthModule],
   controllers: [OutboxController],
   providers: [OutboxService],
+  exports: [OutboxService],
 })
 export class OutboxModule {}

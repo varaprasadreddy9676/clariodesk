@@ -38,6 +38,9 @@ export function makeMediaDownloadProcessor(deps: WorkerDeps) {
       return;
     }
     if (row.storageStatus === "downloaded") return; // idempotent
+    if (!row.messageId) {
+      throw new Error("pending outbound media cannot use the download worker");
+    }
 
     const phone = await deps.db
       .select({
@@ -84,6 +87,8 @@ export function makeMediaDownloadProcessor(deps: WorkerDeps) {
           storageStatus: "downloaded",
           sha256Hash: sha256,
           sizeBytes: result.bytes.byteLength,
+          ...(result.mimeType ? { mimeType: result.mimeType } : {}),
+          ...(result.fileName ? { fileName: result.fileName } : {}),
           updatedAt: new Date(),
         })
         .where(eq(schema.messageMedia.id, mediaId));
