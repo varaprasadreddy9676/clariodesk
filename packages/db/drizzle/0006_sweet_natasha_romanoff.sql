@@ -1,0 +1,2 @@
+ALTER TABLE "outbox_messages" ADD COLUMN "idempotency_key" uuid;--> statement-breakpoint
+CREATE UNIQUE INDEX "outbox_ws_idempotency_uq" ON "outbox_messages" USING btree ("workspace_id","idempotency_key");

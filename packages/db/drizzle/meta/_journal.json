@@ -1,0 +1,90 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1781238136331,
+      "tag": "0000_steep_eternity",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1781257569285,
+      "tag": "0001_massive_malice",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781338921472,
+      "tag": "0002_demonic_tiger_shark",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781355341341,
+      "tag": "0003_skinny_secret_warriors",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781362000000,
+      "tag": "0004_add_clario_gateway_adapter",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781432619183,
+      "tag": "0005_nosy_sasquatch",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782019076948,
+      "tag": "0006_sweet_natasha_romanoff",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782019546693,
+      "tag": "0007_cold_stellaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782020569110,
+      "tag": "0008_hard_saracen",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782020927971,
+      "tag": "0009_huge_microbe",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782050147676,
+      "tag": "0010_sticky_thunderbolt_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1750519200000,
+      "tag": "0011_channels_last_msg_idx",
+      "breakpoints": true
+    }
+  ]
+}

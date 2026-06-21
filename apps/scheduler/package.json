@@ -1,0 +1,20 @@
+{
+  "name": "@clariodesk/scheduler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "DOTENV_CONFIG_PATH=../../.env tsx watch --tsconfig tsconfig.json src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@clariodesk/config": "*",
+    "@clariodesk/db": "*",
+    "@clariodesk/logger": "*",
+    "@clariodesk/storage": "*",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.2"
+  }
+}

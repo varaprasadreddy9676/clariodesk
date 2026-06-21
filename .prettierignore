@@ -1,0 +1,9 @@
+**/dist/**
+**/node_modules/**
+**/drizzle/**
+**/*.md
+package-lock.json
+test-results/
+playwright-report/
+.clario-gateway/
+.wwebjs_cache/

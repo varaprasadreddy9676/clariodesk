@@ -1,0 +1,27 @@
+{
+  "name": "@clariodesk/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "DOTENV_CONFIG_PATH=../../.env tsx watch --tsconfig tsconfig.json src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@clariodesk/config": "*",
+    "@clariodesk/crypto": "*",
+    "@clariodesk/db": "*",
+    "@clariodesk/events": "*",
+    "@clariodesk/gateway-adapters": "*",
+    "@clariodesk/logger": "*",
+    "@clariodesk/policy-engine": "*",
+    "@clariodesk/storage": "*",
+    "@clariodesk/types": "*",
+    "bullmq": "^5.34.5",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.2",
+    "ioredis": "^5.4.2"
+  }
+}

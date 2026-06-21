@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "phone_instances_provider_global_uq" ON "phone_instances" USING btree ("adapter_type","provider_instance_id");
