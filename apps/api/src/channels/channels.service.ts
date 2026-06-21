@@ -143,8 +143,7 @@ export class ChannelsService {
     }
 
     const confirmed = await adapter.setChatState({
-      providerInstanceId:
-        channel.providerInstanceId ?? channel.phoneInstanceId,
+      providerInstanceId: channel.providerInstanceId ?? channel.phoneInstanceId,
       providerChatId: channel.providerChatId,
       ...input,
     } as SetChatStateInput);
@@ -240,8 +239,7 @@ export class ChannelsService {
       throw new BadRequestException("Gateway does not support chat refresh");
     }
     const confirmed = await adapter.fetchChat({
-      providerInstanceId:
-        channel.providerInstanceId ?? channel.phoneInstanceId,
+      providerInstanceId: channel.providerInstanceId ?? channel.phoneInstanceId,
       providerChatId: channel.providerChatId,
     });
     const nextStatus = confirmed.isArchived

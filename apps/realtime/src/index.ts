@@ -30,9 +30,13 @@ async function main(): Promise<void> {
 
   const http = createServer();
   const allowedOrigins = config.CORS_ORIGINS
-    ? config.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
+    ? config.CORS_ORIGINS.split(",")
+        .map((o) => o.trim())
+        .filter(Boolean)
     : false;
-  const io = new Server(http, { cors: { origin: allowedOrigins, credentials: true } });
+  const io = new Server(http, {
+    cors: { origin: allowedOrigins, credentials: true },
+  });
   const states = new WeakMap<Socket, SocketState>();
 
   io.use((socket, next) => {

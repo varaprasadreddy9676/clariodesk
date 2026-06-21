@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "channels_ws_last_msg_idx" ON "channels" USING btree ("workspace_id","last_message_at");

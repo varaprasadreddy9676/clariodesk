@@ -14,7 +14,8 @@ if (!apiKey) throw new Error("CLARIO_GATEWAY_API_KEY is required");
 const webhookSecretRaw =
   process.env.CLARIO_GATEWAY_WEBHOOK_SECRET ??
   process.env.GATEWAY_WEBHOOK_SECRET;
-if (!webhookSecretRaw) throw new Error("CLARIO_GATEWAY_WEBHOOK_SECRET is required");
+if (!webhookSecretRaw)
+  throw new Error("CLARIO_GATEWAY_WEBHOOK_SECRET is required");
 const webhookSecret: string = webhookSecretRaw;
 
 const dataDir = process.env.CLARIO_GATEWAY_DATA_DIR ?? "./.clario-gateway";
@@ -106,10 +107,7 @@ app.post("/sessions/:id/chats/:chatId/actions", ({ params, body }) => {
   const input = requireObject(body);
   return manager
     .get(requiredParam(params, "id"))
-    .setChatState(
-      requiredParam(params, "chatId"),
-      parseChatStateAction(input),
-    );
+    .setChatState(requiredParam(params, "chatId"), parseChatStateAction(input));
 });
 app.get("/sessions/:id/chats/:chatId/messages", ({ params, query }) => {
   return manager
@@ -262,9 +260,7 @@ function requiredParam(params: Record<string, string>, key: string): string {
   return value;
 }
 
-function parseChatStateAction(
-  input: Record<string, unknown>,
-): ChatStateAction {
+function parseChatStateAction(input: Record<string, unknown>): ChatStateAction {
   switch (requiredString(input, "action")) {
     case "pin":
       return { action: "pin", pinned: requiredBoolean(input, "pinned") };
@@ -285,10 +281,7 @@ function parseChatStateAction(
   }
 }
 
-function requiredBoolean(
-  input: Record<string, unknown>,
-  key: string,
-): boolean {
+function requiredBoolean(input: Record<string, unknown>, key: string): boolean {
   const value = input[key];
   if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
   return value;

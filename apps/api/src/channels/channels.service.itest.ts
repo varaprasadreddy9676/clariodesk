@@ -116,7 +116,9 @@ describe("ChannelsService synchronized actions", () => {
   it("leaves local state unchanged when WhatsApp rejects an action", async () => {
     const fixture = await createChannelFixture();
     const adapter = {
-      setChatState: vi.fn().mockRejectedValue(new Error("provider unavailable")),
+      setChatState: vi
+        .fn()
+        .mockRejectedValue(new Error("provider unavailable")),
     };
     const { service } = makeService({ adapter });
 
@@ -246,10 +248,12 @@ describe("ChannelsService synchronized actions", () => {
   });
 });
 
-function makeService(input: {
-  access?: AccessService;
-  adapter?: Record<string, ReturnType<typeof vi.fn>>;
-} = {}) {
+function makeService(
+  input: {
+    access?: AccessService;
+    adapter?: Record<string, ReturnType<typeof vi.fn>>;
+  } = {},
+) {
   const access =
     input.access ??
     ({
@@ -290,10 +294,12 @@ function makeService(input: {
   };
 }
 
-async function createChannelFixture(input: {
-  title?: string;
-  lastMessageAt?: Date;
-} = {}) {
+async function createChannelFixture(
+  input: {
+    title?: string;
+    lastMessageAt?: Date;
+  } = {},
+) {
   const workspaceId = randomUUID();
   const userId = randomUUID();
   const phoneInstanceId = randomUUID();
