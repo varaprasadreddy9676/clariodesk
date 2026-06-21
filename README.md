@@ -282,14 +282,49 @@ For large features, open an issue first so we can align on approach.
 
 ## Roadmap
 
-- [ ] Webhook-based WhatsApp Cloud API adapter (no Puppeteer required)
-- [ ] Broadcast / campaign sending with opt-out tracking
-- [ ] AI-powered auto-reply suggestions
-- [ ] Zapier / n8n integration
-- [ ] Mobile app (React Native)
-- [ ] Multi-language support
+ClarioDesk is built in public. Here's where we're headed — roughly in order.
 
-Vote on issues or open new ones to shape the roadmap.
+### v0.2 — Outreach & Automation
+- [ ] **Broadcast campaigns** — send to a list with opt-out tracking and send-rate throttling to protect your number
+- [ ] **Scheduled messages** — queue a reply for the right time zone
+- [ ] **Auto-reply rules** — keyword triggers, out-of-office, and first-response bots
+- [ ] **Canned responses** — team-wide saved replies with `/ ` search
+
+### v0.3 — WhatsApp Cloud API adapter
+- [ ] **Official API support** — connect via Meta's Cloud API (no Puppeteer, no phone required)
+- [ ] **Hybrid mode** — run Cloud API and linked-device side by side for teams that need both
+- [ ] **Message templates** — send and manage approved template messages
+
+### v0.4 — AI
+- [ ] **Smart reply suggestions** — context-aware reply drafts powered by Claude / OpenAI
+- [ ] **Conversation summaries** — catch up on a long thread in one click
+- [ ] **Sentiment tagging** — auto-flag urgent or negative conversations
+- [ ] **AI ticket classification** — auto-assign category and priority from message content
+
+### v0.5 — CRM & Integrations
+- [ ] **Contact profiles** — full history, tags, and custom fields per contact
+- [ ] **Zapier / n8n / Make webhooks** — trigger flows on new message, ticket created, resolved
+- [ ] **HubSpot / Pipedrive sync** — two-way contact and deal sync
+- [ ] **Slack notifications** — get a Slack ping when a conversation needs attention
+
+### v0.6 — Mobile
+- [ ] **iOS + Android app** (React Native) — full inbox, reply, and ticket management from your phone
+- [ ] **Push notifications** — native alerts for new messages and assignments
+- [ ] **Offline queue** — compose replies offline, send when connected
+
+### v1.0 — Enterprise-ready
+- [ ] **SSO / SAML** — Okta, Google Workspace, Azure AD
+- [ ] **Role-based access control** — custom roles, channel-level permissions
+- [ ] **Audit log** — every action logged with actor, timestamp, and before/after state
+- [ ] **Data retention policies** — configurable auto-purge per workspace
+- [ ] **Multi-language UI** — Spanish, Portuguese, Arabic, Hindi (most common WhatsApp markets)
+- [ ] **SLA timers & escalation** — alert when a conversation breaches first-response or resolution SLA
+
+---
+
+**Shape the roadmap** — upvote issues or open new ones. Features with the most community interest move up.
+
+> We follow our users. If you're a team actively using ClarioDesk and need something sooner, open an issue and tell us your use case — that weight matters.
 
 ---
 
