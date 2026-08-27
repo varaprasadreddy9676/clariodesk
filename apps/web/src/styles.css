@@ -11,87 +11,97 @@
     system-ui,
     -apple-system,
     sans-serif;
-  /* Chat header: teal in light mode, dark surface in dark mode */
-  --chat-header-bg: #008069;
+  /* Chat header: brand in light mode, dark surface in dark mode */
+  --chat-header-bg: #079455;
   --chat-header-text: #ffffff;
-  /* WhatsApp Web palette */
-  --canvas: #f0f2f5; /* panel / header gray */
+  /* ClarioDesk design system palette (docs/design/design-system.md) */
+  --canvas: #f5f5f7; /* panel / header gray */
   --surface: #ffffff;
-  --surface-muted: #f0f2f5;
+  --surface-muted: #f7f7f8;
   --surface-raised: #ffffff;
-  --border: #e9edef;
-  --border-strong: #d1d7db;
-  --text: #111b21;
-  --text-secondary: #3b4a54;
-  --text-muted: #667781;
-  --brand: #00a884; /* WhatsApp teal-green */
-  --brand-hover: #008069;
-  --brand-soft: #d9fdd3;
-  --success: #008069;
-  --warning: #b3791f;
-  --danger: #ea0038;
-  --info: #027eb5;
-  --note: #fff7c4; /* internal-note yellow (kept distinct from chat) */
-  --note-border: #f5e07a;
-  --outbound: #d9fdd3; /* WhatsApp outgoing bubble */
-  --inbound: #ffffff; /* WhatsApp incoming bubble */
-  --deleted: #f5f6f6;
-  --unread: #25d366; /* bright unread badge green */
-  --tick: #53bdeb; /* read-receipt blue */
-  --link: #027eb5;
-  /* WhatsApp chat wallpaper: warm cream + tiled doodle overlay */
+  --border: rgb(16 24 40 / 7%);
+  --border-strong: #d0d5dd;
+  --text: #101828;
+  --text-secondary: #475467;
+  --text-muted: #667085;
+  --brand: #17b26a;
+  --brand-hover: #079455;
+  --brand-soft: #effcf5;
+  --success: #12b76a;
+  --warning: #f79009;
+  --danger: #f04438;
+  --info: #2e90fa;
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+  --shadow-card:
+    0 1px 2px rgb(16 24 40 / 3%),
+    0 4px 12px rgb(16 24 40 / 4%);
+  --shadow-floating: 0 8px 30px rgb(16 24 40 / 10%);
+  --note: #fffaeb; /* internal-note yellow (kept distinct from chat) */
+  --note-border: #fedf89;
+  --outbound: #e7f8ef; /* outgoing bubble */
+  --inbound: #f2f4f7; /* incoming bubble */
+  --deleted: #f2f4f7;
+  --unread: #17b26a;
+  --tick: #2e90fa; /* read-receipt blue */
+  --link: #2e90fa;
+  /* Chat wallpaper: warm cream + tiled doodle overlay */
   --chat-bg: #efeae2;
   --chat-doodle: url("/chat-bg-light.svg");
-  --bubble-shadow: 0 1px 0.5px rgb(11 20 26 / 13%);
-  --shadow-popover: 0 12px 28px rgb(11 20 26 / 18%);
+  --bubble-shadow: 0 1px 0.5px rgb(16 24 40 / 6%);
+  --shadow-popover: var(--shadow-floating);
   /* interaction surfaces */
-  --hover: #f5f6f6;
-  --active: #f0f2f5;
+  --hover: #f2f4f7;
+  --active: #eaecf0;
   --pill-bg: rgb(255 255 255 / 85%);
-  --system-bg: rgb(255 245 196 / 85%);
+  --system-bg: rgb(255 250 235 / 85%);
   --system-text: #5b5340;
   --bubble-fade: rgb(0 0 0 / 8%);
   --bubble-fade-out: rgb(6 95 70 / 10%);
 }
 
-/* ── WhatsApp dark theme ─────────────────────────────────────────────── */
+/* ── ClarioDesk dark theme (docs/design/design-system.md §34) ──────────── */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --chat-header-bg: #1f2c34;
-  --chat-header-text: #e9edef;
-  --canvas: #111b21;
-  --surface: #111b21;
-  --surface-muted: #202c33;
-  --surface-raised: #202c33;
-  --border: #2a3942;
-  --border-strong: #374851;
-  --text: #e9edef;
-  --text-secondary: #d1d7db;
-  --text-muted: #8696a0;
-  --brand: #00a884;
-  --brand-hover: #06cf9c;
-  --brand-soft: #103629;
-  --success: #00a884;
-  --warning: #d3a44f;
-  --danger: #f15c6d;
-  --info: #53bdeb;
-  --note: #3a3a1f;
-  --note-border: #6b6b34;
-  --outbound: #005c4b; /* WhatsApp dark outgoing bubble */
-  --inbound: #202c33; /* WhatsApp dark incoming bubble */
-  --deleted: #182229;
-  --unread: #00a884;
-  --tick: #53bdeb;
+  --chat-header-bg: #17191c;
+  --chat-header-text: #f5f5f7;
+  --canvas: #101214;
+  --surface: #17191c;
+  --surface-muted: #1d2024;
+  --surface-raised: #25282d;
+  --border: rgb(255 255 255 / 8%);
+  --border-strong: rgb(255 255 255 / 14%);
+  --text: #f5f5f7;
+  --text-secondary: #b8bcc4;
+  --text-muted: #8b909b;
+  --brand: #17b26a;
+  --brand-hover: #3dd68c;
+  --brand-soft: #113328;
+  --success: #17b26a;
+  --warning: #f79009;
+  --danger: #f04438;
+  --info: #2e90fa;
+  --note: #3a3320;
+  --note-border: #6b5a20;
+  --outbound: #10352a; /* dark outgoing bubble */
+  --inbound: #1d2024; /* dark incoming bubble */
+  --deleted: #1d2024;
+  --unread: #17b26a;
+  --tick: #2e90fa;
   --link: #53bdeb;
   --chat-bg: #0b141a;
   --chat-doodle: url("/chat-bg-dark.svg");
   --bubble-shadow: 0 1px 0.5px rgb(0 0 0 / 20%);
   --shadow-popover: 0 12px 28px rgb(0 0 0 / 45%);
-  --hover: #202c33;
-  --active: #2a3942;
-  --pill-bg: rgb(31 42 49 / 92%);
-  --system-bg: rgb(28 40 47 / 92%);
-  --system-text: #8696a0;
+  --hover: #1d2024;
+  --active: #25282d;
+  --pill-bg: rgb(29 32 36 / 92%);
+  --system-bg: rgb(29 32 36 / 92%);
+  --system-text: #b8bcc4;
   --bubble-fade: rgb(0 0 0 / 32%);
   --bubble-fade-out: rgb(0 0 0 / 32%);
 }
@@ -2428,8 +2438,8 @@ button:disabled {
   flex: 0 0 auto;
   place-items: center;
   border-radius: 50%;
-  background: #d9fdd3;
-  color: #08766a;
+  background: var(--brand-soft);
+  color: var(--brand-hover);
   font-size: 12px;
   font-weight: 700;
 }
@@ -2648,12 +2658,18 @@ button:disabled {
   flex: 0 0 auto;
   place-items: center;
   border: 0;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-muted);
+  outline-offset: -2px;
 }
 
 .password-input button:hover {
   color: var(--text);
+}
+
+.password-input button:focus-visible {
+  outline: 2px solid var(--brand);
 }
 
 .auth-submit {
@@ -2834,6 +2850,12 @@ button:disabled {
   gap: 14px;
 }
 
+.page-panel-empty {
+  display: grid;
+  place-items: center;
+  min-height: calc(100% - 40px);
+}
+
 .setup-empty {
   display: grid;
   justify-items: center;
@@ -2904,14 +2926,25 @@ button:disabled {
 
 .inline-form,
 .phone-setup {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(160px, 1fr)) auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-bottom: 14px;
 }
 
-.phone-setup {
-  grid-template-columns: repeat(3, minmax(160px, 1fr));
+.inline-form input,
+.inline-form select,
+.phone-setup input,
+.phone-setup select {
+  flex: 1 1 160px;
+}
+
+.inline-form button,
+.inline-form .primary-action,
+.phone-setup button,
+.phone-setup .primary-action {
+  flex: 0 0 auto;
 }
 
 .phone-setup .primary-action {
@@ -3222,10 +3255,16 @@ button:disabled {
   margin-bottom: 14px;
   padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: var(--surface);
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+.inline-result-error {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  color: var(--danger);
 }
 
 .data-row.tall {
