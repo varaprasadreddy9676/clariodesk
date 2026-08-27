@@ -2237,7 +2237,6 @@ function SearchResultGroup({
         >
           <div>
             <strong>{item.body}</strong>
-            <span>{item.channelId.slice(0, 8)}</span>
           </div>
           <em>{item.meta}</em>
         </button>

@@ -2253,6 +2253,8 @@ button:disabled {
 .search-result-row strong {
   overflow: hidden;
   color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2260,7 +2262,7 @@ button:disabled {
 .search-result-row span,
 .search-result-row em {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -3200,6 +3202,16 @@ button:disabled {
   min-width: 0;
 }
 
+.phone-secondary-row div strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.phone-secondary-row div span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 .phone-secondary-row em {
   color: var(--text-secondary);
   font-size: 12px;
@@ -3283,10 +3295,15 @@ button:disabled {
   display: block;
 }
 
+.data-row strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .data-row span,
 .data-row em {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   font-style: normal;
 }
 
