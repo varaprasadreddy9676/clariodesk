@@ -431,8 +431,8 @@ function Workbench({
   const team = useAsyncData(() => api.teamMembers(), [api]);
 
   const mappedTickets = useMemo(
-    () => (tickets.data ?? []).map(toUiTicket),
-    [tickets.data],
+    () => (tickets.data ?? []).map((ticket) => toUiTicket(ticket, team.data ?? [])),
+    [tickets.data, team.data],
   );
   const mappedChannels = useMemo(
     () =>
@@ -2511,14 +2511,14 @@ function toUiMessage(message: ApiMessage): Message {
   };
 }
 
-function toUiTicket(ticket: ApiTicket): UiTicket {
+function toUiTicket(ticket: ApiTicket, members: ApiTeamMember[]): UiTicket {
   return {
     id: ticket.id.slice(0, 8),
     title: ticket.title,
     status: ticket.status,
     priority: ticket.priority === "low" ? "normal" : ticket.priority,
     owner: ticket.assignedUserId
-      ? ticket.assignedUserId.slice(0, 8)
+      ? memberName(members, ticket.assignedUserId)
       : "Unassigned",
   };
 }
