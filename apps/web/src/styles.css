@@ -540,7 +540,8 @@ button:disabled {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgb(11 20 26 / 52%);
+  background: rgb(16 24 40 / 35%);
+  backdrop-filter: blur(6px);
 }
 
 .conversation-dialog {
@@ -548,12 +549,12 @@ button:disabled {
   gap: 14px;
   width: min(460px, 100%);
   max-height: min(720px, calc(100vh - 40px));
-  padding: 18px;
+  padding: 20px;
   overflow: auto;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-xl);
   background: var(--surface);
-  box-shadow: var(--shadow-popover);
+  box-shadow: var(--shadow-floating);
 }
 
 .conversation-dialog header,
@@ -664,7 +665,7 @@ button:disabled {
     border-right: 0;
     border-bottom: 0;
     border-left: 0;
-    border-radius: 8px 8px 0 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     padding-bottom: max(18px, env(safe-area-inset-bottom));
   }
 
@@ -1132,7 +1133,7 @@ button:disabled {
 .inline-banner {
   padding: 8px 16px;
   border-bottom: 1px solid var(--border);
-  background: #fff8e8;
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface));
 }
 
 .message-scroll {
@@ -1480,14 +1481,14 @@ button:disabled {
   overflow: auto;
   overscroll-behavior: contain;
   border: 0;
-  border-radius: 12px;
-  background: #233138;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 45%), 0 2px 6px rgb(0 0 0 / 30%);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-floating);
 }
 
 :root:not([data-theme="dark"]) .message-context-menu {
-  background: #ffffff;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 18%), 0 2px 6px rgb(0 0 0 / 10%);
+  background: var(--surface);
+  box-shadow: var(--shadow-floating);
 }
 
 .channel-context-menu {
@@ -1514,7 +1515,7 @@ button:disabled {
 }
 
 :root:not([data-theme="dark"]) .message-context-menu button {
-  color: #111b21;
+  color: var(--text);
 }
 
 .message-context-menu button:hover:not(:disabled),
@@ -1726,7 +1727,7 @@ button:disabled {
 }
 
 .composer-note .composer-tabs button.is-active {
-  color: #9a5a00;
+  color: var(--warning);
 }
 
 .composer-surface {
@@ -1792,7 +1793,7 @@ button:disabled {
 }
 
 .composer-note .composer-send:not(:disabled) {
-  background: #b66a00;
+  background: var(--warning);
 }
 
 .composer-toolbar {
@@ -2282,8 +2283,8 @@ button:disabled {
 }
 
 .risk-pill {
-  border-color: #ead19a;
-  background: #fff8e8;
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--border));
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface));
   color: var(--warning);
   text-transform: none;
 }
@@ -2303,7 +2304,7 @@ button:disabled {
   min-height: 100%;
   padding: clamp(18px, 4vw, 56px);
   overflow: auto;
-  background: #dfe5e7;
+  background: var(--canvas);
 }
 
 .auth-shell {
@@ -2312,8 +2313,8 @@ button:disabled {
   width: min(1180px, 100%);
   min-height: min(760px, calc(100vh - clamp(36px, 8vw, 112px)));
   margin: 0 auto;
-  border-radius: 8px;
-  box-shadow: var(--shadow-popover);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-floating);
   overflow: hidden;
 }
 
@@ -2323,7 +2324,7 @@ button:disabled {
   flex-direction: column;
   min-width: 0;
   padding: 38px 44px 40px;
-  background-color: #075e54;
+  background-color: var(--brand-hover);
   color: #fff;
 }
 
@@ -2355,9 +2356,9 @@ button:disabled {
   height: 42px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: #fff;
-  color: #075e54;
+  color: var(--brand-hover);
   font-size: 21px;
   font-weight: 800;
 }
@@ -2387,7 +2388,7 @@ button:disabled {
   align-items: center;
   gap: 7px;
   margin-bottom: 18px;
-  color: #b9f6e8;
+  color: color-mix(in srgb, var(--brand) 45%, white);
   font-size: 13px;
   font-weight: 600;
 }
@@ -2490,7 +2491,7 @@ button:disabled {
 }
 
 .auth-bubble strong {
-  color: #08766a;
+  color: var(--brand-hover);
   font-size: 11px;
 }
 
@@ -2543,8 +2544,8 @@ button:disabled {
 .auth-ticket-row em {
   padding: 4px 7px;
   border-radius: 999px;
-  background: #e8f7f3;
-  color: #08766a;
+  background: var(--brand-soft);
+  color: var(--brand-hover);
   font-style: normal;
   font-weight: 700;
 }
@@ -2578,8 +2579,8 @@ button:disabled {
   height: 40px;
   margin-bottom: 6px;
   place-items: center;
-  border-radius: 8px;
-  background: #e8f7f3;
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
   color: var(--brand-hover);
 }
 
@@ -2683,7 +2684,7 @@ button:disabled {
 }
 
 .auth-submit:hover:not(:disabled) {
-  background: #006c5d;
+  background: color-mix(in srgb, var(--brand-hover) 82%, black);
 }
 
 .auth-submit:disabled {
@@ -2737,7 +2738,7 @@ button:disabled {
 }
 
 .auth-form .field input::placeholder {
-  color: #9aa7ad;
+  color: var(--text-muted);
 }
 
 @media (max-height: 800px) and (min-width: 821px) {
@@ -2788,9 +2789,9 @@ button:disabled {
 
 .form-error {
   padding: 8px 10px;
-  border: 1px solid #f4b4ae;
-  border-radius: 6px;
-  background: #fff0ee;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
   color: var(--danger);
   font-size: 12px;
 }
@@ -2803,19 +2804,19 @@ button:disabled {
   max-width: min(380px, calc(100vw - 36px));
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
-  box-shadow: var(--shadow-popover);
+  box-shadow: var(--shadow-floating);
   color: var(--text);
   font-size: 13px;
 }
 
 .toast-ok {
-  border-color: #9fd1b8;
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
 }
 
 .toast-error {
-  border-color: #f4b4ae;
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
 }
 
 .page-panel {

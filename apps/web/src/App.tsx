@@ -1286,8 +1286,6 @@ function PhonesView({
 }) {
   const [displayName, setDisplayName] = useState("Clario Gateway Support");
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [providerInstanceId, setProviderInstanceId] =
-    useState("clario-support");
   const [gatewayBaseUrl, setGatewayBaseUrl] = useState("http://localhost:2786");
   const [apiKey, setApiKey] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -1748,7 +1746,7 @@ function PhonesView({
         <details className="phone-setup-panel">
           <summary>
             <Plus size={16} aria-hidden="true" />
-            Advanced — add another number or a custom gateway
+            Add another number
           </summary>
           <div className="phone-setup">
             <input
@@ -1761,17 +1759,12 @@ function PhonesView({
               onChange={(event) => setPhoneNumber(event.target.value)}
               placeholder="WhatsApp number, optional"
             />
-            <input
-              value={providerInstanceId}
-              onChange={(event) => setProviderInstanceId(event.target.value)}
-              placeholder="Gateway instance id"
-            />
             <button
               type="button"
               className="secondary-action"
               onClick={() => setAdvancedOpen((value) => !value)}
             >
-              {advancedOpen ? "Hide advanced" : "Advanced"}
+              {advancedOpen ? "Hide custom gateway" : "Use a custom gateway"}
             </button>
             {advancedOpen ? (
               <>
@@ -1790,11 +1783,7 @@ function PhonesView({
             <button
               className="primary-action"
               type="button"
-              disabled={
-                !displayName.trim() ||
-                !providerInstanceId.trim() ||
-                actionKey === "create"
-              }
+              disabled={!displayName.trim() || actionKey === "create"}
               onClick={() =>
                 void doPhoneAction(
                   "create",
@@ -1802,7 +1791,7 @@ function PhonesView({
                     await api.createPhone({
                       adapterType: "clario_gateway",
                       displayName,
-                      providerInstanceId,
+                      providerInstanceId: `wa-${Math.random().toString(36).slice(2, 8)}`,
                       ...(phoneNumber.trim()
                         ? { phoneNumber: phoneNumber.trim() }
                         : {}),
@@ -1813,11 +1802,11 @@ function PhonesView({
                     });
                     onChanged();
                   },
-                  "Phone route created",
+                  "Number added",
                 )
               }
             >
-              {actionKey === "create" ? "Adding..." : "Add route"}
+              {actionKey === "create" ? "Adding..." : "Add number"}
             </button>
           </div>
           {additionalPhones.length > 0 ||
@@ -1895,6 +1884,9 @@ function ClientsView({
         </button>
       </div>
       <div className="table-list">
+        {clients.length === 0 ? (
+          <Empty title="No clients yet" body="Add a client above to start mapping WhatsApp chats to their conversations." />
+        ) : null}
         {clients.map((client) => (
           <ClientRow key={client.id} api={api} client={client} />
         ))}
