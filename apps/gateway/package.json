@@ -12,7 +12,8 @@
   "dependencies": {
     "dotenv": "^16.4.7",
     "qrcode": "^1.5.4",
-    "whatsapp-web.js": "^1.26.1-alpha.3"
+    "baileys": "^7.0.0-rc14",
+    "pino": "^9.6.0"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.5"

@@ -2,87 +2,22 @@ import { EventEmitter } from "node:events";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import QRCode from "qrcode";
-import pkg from "whatsapp-web.js";
-
-const { Client, LocalAuth, MessageMedia } = pkg;
-
-type WWebMessage = {
-  id?: {
-    _serialized?: string;
-    id?: string;
-    fromMe?: boolean;
-    remote?: string;
-    participant?: string;
-  };
-  from?: string;
-  to?: string;
-  author?: string;
-  body?: string;
-  type?: string;
-  timestamp?: number;
-  fromMe?: boolean;
-  hasMedia?: boolean;
-  hasQuotedMsg?: boolean;
-  getQuotedMessage?: () => Promise<WWebMessage>;
-  downloadMedia?: () => Promise<{
-    mimetype?: string;
-    filename?: string | null;
-    data?: string;
-  } | null>;
-  reply?: (body: string) => Promise<WWebMessage>;
-  react?: (reaction: string) => Promise<void>;
-};
-
-type WWebChat = {
-  id?: { _serialized?: string };
-  name?: string;
-  isGroup?: boolean;
-  pinned?: boolean;
-  isMuted?: boolean;
-  archived?: boolean;
-  participants?: unknown[];
-  getContact?: () => Promise<WWebContact>;
-  fetchMessages: (opts: { limit: number }) => Promise<WWebMessage[]>;
-  pin?: () => Promise<boolean>;
-  unpin?: () => Promise<boolean>;
-  mute?: () => Promise<unknown>;
-  unmute?: () => Promise<unknown>;
-  archive?: () => Promise<void>;
-  unarchive?: () => Promise<void>;
-  markUnread?: () => Promise<void>;
-};
-
-type WWebContact = {
-  name?: string;
-  pushname?: string;
-  shortName?: string;
-  getFormattedNumber?: () => Promise<string>;
-};
-
-type WWebClient = InstanceType<typeof Client> & {
-  info?: { wid?: { user?: string }; pushname?: string };
-  pupPage?: {
-    evaluate: <T>(fn: () => T | Promise<T>) => Promise<T>;
-  };
-  getChats: () => Promise<WWebChat[]>;
-  getProfilePicUrl: (contactId: string) => Promise<string | undefined>;
-  getChatById: (id: string) => Promise<WWebChat>;
-  getMessageById: (id: string) => Promise<WWebMessage | null>;
-  getNumberId: (
-    phoneNumber: string,
-  ) => Promise<{ _serialized?: string } | null>;
-  createGroup: (
-    title: string,
-    participantIds: string[],
-  ) => Promise<
-    string | { gid?: string | { _serialized?: string }; id?: string }
-  >;
-  sendMessage: (
-    chatId: string,
-    content: string | unknown,
-    options?: Record<string, unknown>,
-  ) => Promise<WWebMessage>;
-};
+import { pino } from "pino";
+import makeWASocket, {
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  downloadMediaMessage,
+  getContentType,
+  jidNormalizedUser,
+  isJidGroup,
+  DisconnectReason,
+  type WASocket,
+  type WAMessage,
+  type WAMessageKey,
+  type Chat,
+  type Contact,
+  type ChatModification,
+} from "baileys";
 
 export type SessionStatus =
   | "created"
@@ -125,31 +60,55 @@ export type ChatStateAction =
   | { action: "mute"; muted: boolean }
   | { action: "archive"; archived: boolean };
 
+// A chat is only surfaced as a "conversation" once we've actually seen a
+// message in it — matches the previous whatsapp-web.js behaviour of only
+// listing chats WhatsApp itself considers active.
+type ChatMeta = {
+  id: string;
+  isGroup: boolean;
+  name: string | null;
+  participantsCount?: number;
+  pinned: boolean;
+  muted: boolean;
+  archived: boolean;
+  lastMessage?: { key: WAMessageKey; messageTimestamp: number };
+};
+
+const MAX_MESSAGES_PER_CHAT = 200;
+const HISTORY_SYNC_WAIT_MS = 10_000;
+const HISTORY_SYNC_POLL_MS = 300;
+const DEFAULT_MUTE_MS = 8 * 60 * 60 * 1000; // 8 hours — WhatsApp's shortest preset
+
+let cachedVersion: Promise<[number, number, number]> | null = null;
+function getWaVersion(): Promise<[number, number, number]> {
+  cachedVersion ??= fetchLatestBaileysVersion().then((r) => r.version);
+  return cachedVersion;
+}
+
 export class GatewaySession extends EventEmitter {
   readonly id: string;
   readonly name: string;
-  private client: WWebClient | null = null;
+  private socket: WASocket | null = null;
   private status: SessionStatus = "created";
   private qr: string | null = null;
   private phone: string | null = null;
   private pushName: string | null = null;
-  private readyRecoveryScheduled = false;
+  private historySynced = false;
+  private reconnecting = false;
 
-  constructor(input: {
-    id: string;
-    name: string;
-    dataDir: string;
-    puppeteerArgs: string[];
-  }) {
+  private readonly chatMeta = new Map<string, ChatMeta>();
+  private readonly messagesByChat = new Map<string, GatewayMessage[]>();
+  private readonly rawMessages = new Map<string, WAMessage>();
+  private readonly contactNames = new Map<string, string>();
+
+  constructor(input: { id: string; name: string; dataDir: string }) {
     super();
     this.id = input.id;
     this.name = input.name;
     this.dataDir = input.dataDir;
-    this.puppeteerArgs = input.puppeteerArgs;
   }
 
   private readonly dataDir: string;
-  private readonly puppeteerArgs: string[];
 
   snapshot() {
     return {
@@ -162,50 +121,113 @@ export class GatewaySession extends EventEmitter {
   }
 
   async start(): Promise<void> {
-    if (this.client) return;
+    if (this.socket) return;
     this.setStatus("initializing");
-    const client = new Client({
-      authStrategy: new LocalAuth({
-        clientId: this.id,
-        dataPath: path.resolve(this.dataDir),
-      }),
-      puppeteer: {
-        headless: true,
-        args: this.puppeteerArgs,
-      },
-    }) as WWebClient;
-
-    client.on("qr", (qr: string) => {
-      void QRCode.toDataURL(qr).then((dataUrl) => {
-        this.qr = dataUrl;
-        this.setStatus("qr_required");
-      });
-    });
-    client.on("authenticated", () => {
-      this.qr = null;
-      this.setStatus("authenticating");
-      this.scheduleReadyRecovery(client);
-    });
-    client.on("ready", () => {
-      this.phone = client.info?.wid?.user ?? null;
-      this.pushName = client.info?.pushname ?? null;
-      this.setStatus("ready");
-    });
-    // `message_create` includes inbound messages and outbound messages sent
-    // from the linked phone. Listening only to `message` misses phone replies.
-    client.on("message_create", (message: WWebMessage) => {
-      this.emit("message", normalizeMessage(message));
-    });
-    client.on("disconnected", () => {
-      this.client = null;
-      this.setStatus("disconnected");
-    });
-    client.on("auth_failure", () => {
+    try {
+      await this.launch();
+    } catch (err) {
+      // A failed launch must not leave `this.socket` set — that would make
+      // every future start() call return early via the guard above,
+      // wedging the session until the whole gateway process restarts.
+      this.socket = null;
       this.setStatus("failed");
+      throw err;
+    }
+  }
+
+  private async launch(): Promise<void> {
+    const authDir = path.resolve(this.dataDir, `session-${this.id}`);
+    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    const version = await getWaVersion();
+
+    const socket = makeWASocket({
+      version,
+      auth: state,
+      logger: pino({ level: "silent" }),
+      syncFullHistory: false,
+      markOnlineOnConnect: false,
+    });
+    this.socket = socket;
+
+    socket.ev.on("creds.update", () => void saveCreds());
+
+    socket.ev.on("connection.update", (update) => {
+      const { connection, qr, lastDisconnect } = update;
+      if (qr) {
+        void QRCode.toDataURL(qr).then((dataUrl) => {
+          this.qr = dataUrl;
+          this.setStatus("qr_required");
+        });
+      }
+      if (connection === "connecting" && !this.qr) {
+        this.setStatus("authenticating");
+      }
+      if (connection === "open") {
+        this.qr = null;
+        this.phone = jidNormalizedUser(socket.user?.id).split("@")[0] ?? null;
+        this.pushName = socket.user?.name ?? socket.user?.notify ?? null;
+        this.setStatus("ready");
+      }
+      if (connection === "close") {
+        this.socket = null;
+        const statusCode = (
+          lastDisconnect?.error as { output?: { statusCode?: number } }
+        )?.output?.statusCode;
+        if (statusCode === DisconnectReason.loggedOut) {
+          this.setStatus("disconnected");
+          return;
+        }
+        // Any other close (network blip, server-initiated restart, etc.) is
+        // transient — reconnect automatically rather than requiring the app
+        // to notice and call connect() again.
+        this.setStatus("disconnected");
+        this.scheduleReconnect();
+      }
     });
 
-    this.client = client;
-    await client.initialize();
+    socket.ev.on("messaging-history.set", ({ chats, contacts, messages }) => {
+      for (const contact of contacts) this.upsertContact(contact);
+      for (const chat of chats) this.upsertChatMeta(chat);
+      for (const message of messages) this.recordMessage(message, false);
+      this.historySynced = true;
+    });
+    socket.ev.on("chats.upsert", (chats) => {
+      for (const chat of chats) this.upsertChatMeta(chat);
+    });
+    socket.ev.on("chats.update", (updates) => {
+      for (const update of updates) this.upsertChatMeta(update);
+    });
+    socket.ev.on("contacts.upsert", (contacts) => {
+      for (const contact of contacts) this.upsertContact(contact);
+    });
+    socket.ev.on("contacts.update", (updates) => {
+      for (const update of updates) this.upsertContact(update);
+    });
+    socket.ev.on("messages.upsert", ({ messages, type }) => {
+      for (const message of messages) {
+        this.recordMessage(message, type !== "notify");
+        if (type === "notify") {
+          const normalized = normalizeMessage(message, this.contactNames);
+          if (normalized) this.emit("message", normalized);
+        }
+      }
+    });
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnecting) return;
+    this.reconnecting = true;
+    setTimeout(() => {
+      this.reconnecting = false;
+      if (this.socket || this.status === "disconnected") {
+        void this.launch().catch((err: unknown) => {
+          console.error(
+            `gateway: reconnect failed for session ${this.id}`,
+            err,
+          );
+        });
+      }
+    }, 3_000);
   }
 
   getQr(): { qr: string | null; status: SessionStatus } {
@@ -213,44 +235,43 @@ export class GatewaySession extends EventEmitter {
   }
 
   async stop(): Promise<void> {
-    if (!this.client) {
-      this.setStatus("disconnected");
-      return;
+    if (this.socket) {
+      await this.socket.end(undefined);
+      this.socket = null;
     }
-    await this.client.destroy();
-    this.client = null;
     this.setStatus("disconnected");
   }
 
   /**
    * Fully unlink the device and clear the saved auth so the next `start()`
-   * generates a fresh QR (true re-pair). `stop()` only destroys the client and
-   * keeps LocalAuth, which would silently resume the existing link.
+   * generates a fresh QR (true re-pair). `stop()` only closes the socket and
+   * keeps the auth state, which would silently resume the existing link.
    */
   async logout(): Promise<void> {
     this.qr = null;
     this.phone = null;
     this.pushName = null;
-    const client = this.client;
-    if (client) {
+    if (this.socket) {
       try {
-        await client.logout();
+        await this.socket.logout();
       } catch {
         // device may already be unlinked; fall through to data removal
       }
       try {
-        await client.destroy();
+        await this.socket.end(undefined);
       } catch {
         // ignore — we are tearing this session down regardless
       }
-      this.client = null;
+      this.socket = null;
     }
+    this.chatMeta.clear();
+    this.messagesByChat.clear();
+    this.rawMessages.clear();
     await this.removeAuthData();
     this.setStatus("disconnected");
   }
 
   private async removeAuthData(): Promise<void> {
-    // LocalAuth persists under `${dataDir}/session-${clientId}`.
     const dir = path.resolve(this.dataDir, `session-${this.id}`);
     await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
@@ -258,44 +279,25 @@ export class GatewaySession extends EventEmitter {
   async chats(): Promise<
     Array<GatewayGroup & { channelType: "group" | "direct" }>
   > {
-    const client = this.requireClient();
-    const chats = (await client.getChats()) as unknown as WWebChat[];
-    const supportedChats = chats.filter((chat) => {
-      const id = chat.id?._serialized ?? "";
-      return (
-        id.endsWith("@g.us") || id.endsWith("@c.us") || id.endsWith("@lid")
-      );
-    });
-    return mapWithConcurrency(supportedChats, 12, async (chat) => {
-      const id = chat.id?._serialized ?? "";
-      const channelType = chat.isGroup
-        ? ("group" as const)
-        : ("direct" as const);
-      let name = chat.name?.trim() || null;
-      if (!name && channelType === "direct" && chat.getContact) {
-        try {
-          const contact = await chat.getContact();
-          name =
-            contact.name?.trim() ||
-            contact.pushname?.trim() ||
-            contact.shortName?.trim() ||
-            (await contact.getFormattedNumber?.())?.trim() ||
-            null;
-        } catch {
-          // Contact metadata can be unavailable for privacy or deleted users.
-        }
-      }
-      const avatarUrl = id
-        ? await client.getProfilePicUrl(id).catch(() => undefined)
-        : undefined;
-      return {
-        id,
-        name,
-        avatarUrl: avatarUrl ?? null,
-        participantsCount: chat.participants?.length,
-        channelType,
-      };
-    }).then((items) => items.filter((chat) => chat.id));
+    this.requireClient();
+    // The chat list only exists once WhatsApp's history sync has delivered
+    // it — give it a short window rather than returning an empty list the
+    // instant a phone connects.
+    const deadline = Date.now() + HISTORY_SYNC_WAIT_MS;
+    while (
+      !this.historySynced &&
+      this.chatMeta.size === 0 &&
+      Date.now() < deadline
+    ) {
+      await sleep(HISTORY_SYNC_POLL_MS);
+    }
+    return [...this.chatMeta.values()].map((chat) => ({
+      id: chat.id,
+      name: chat.name,
+      avatarUrl: null,
+      participantsCount: chat.participantsCount,
+      channelType: chat.isGroup ? ("group" as const) : ("direct" as const),
+    }));
   }
 
   async groups(): Promise<GatewayGroup[]> {
@@ -310,34 +312,24 @@ export class GatewaySession extends EventEmitter {
   }
 
   async chat(chatId: string): Promise<GatewayChatState> {
-    const client = this.requireClient();
-    const chat = (await client.getChatById(chatId)) as unknown as WWebChat;
-    const id = chat.id?._serialized ?? chatId;
-    const channelType = chat.isGroup ? ("group" as const) : ("direct" as const);
-    let name = chat.name?.trim() || null;
-    if (!name && channelType === "direct" && chat.getContact) {
-      try {
-        const contact = await chat.getContact();
-        name =
-          contact.name?.trim() ||
-          contact.pushname?.trim() ||
-          contact.shortName?.trim() ||
-          (await contact.getFormattedNumber?.())?.trim() ||
-          null;
-      } catch {
-        // WhatsApp may withhold contact metadata because of privacy settings.
-      }
+    const socket = this.requireClient();
+    const meta = this.chatMeta.get(chatId);
+    const isGroup = isJidGroup(chatId);
+    let avatarUrl: string | undefined;
+    try {
+      avatarUrl = await socket.profilePictureUrl(chatId, "preview");
+    } catch {
+      // No photo set, or privacy settings withhold it.
     }
-    const avatarUrl = await client.getProfilePicUrl(id).catch(() => undefined);
     return {
-      id,
-      name,
+      id: chatId,
+      name: meta?.name ?? null,
       avatarUrl: avatarUrl ?? null,
-      participantsCount: chat.participants?.length,
-      channelType,
-      isPinned: Boolean(chat.pinned),
-      isMuted: Boolean(chat.isMuted),
-      isArchived: Boolean(chat.archived),
+      participantsCount: meta?.participantsCount,
+      channelType: isGroup ? "group" : "direct",
+      isPinned: Boolean(meta?.pinned),
+      isMuted: Boolean(meta?.muted),
+      isArchived: Boolean(meta?.archived),
     };
   }
 
@@ -345,49 +337,45 @@ export class GatewaySession extends EventEmitter {
     chatId: string,
     action: ChatStateAction,
   ): Promise<GatewayChatState> {
-    const chat = (await this.requireClient().getChatById(
-      chatId,
-    )) as unknown as WWebChat;
-    const operation = async () => {
-      switch (action.action) {
-        case "pin":
-          if (Boolean(chat.pinned) === action.pinned) break;
-          await requireChatMethod(chat, action.pinned ? "pin" : "unpin")();
-          break;
-        case "mute":
-          if (Boolean(chat.isMuted) === action.muted) break;
-          await requireChatMethod(chat, action.muted ? "mute" : "unmute")();
-          break;
-        case "archive":
-          if (Boolean(chat.archived) === action.archived) break;
-          await requireChatMethod(
-            chat,
-            action.archived ? "archive" : "unarchive",
-          )();
-          break;
-        case "mark_unread":
-          await requireChatMethod(chat, "markUnread")();
-          break;
-      }
-    };
-    await withTimeout(operation(), 20_000);
+    const socket = this.requireClient();
+    const meta = this.chatMeta.get(chatId);
+    const lastMessages = meta?.lastMessage ? [meta.lastMessage] : [];
+    let mod: ChatModification;
+    switch (action.action) {
+      case "pin":
+        mod = { pin: action.pinned };
+        break;
+      case "mute":
+        mod = { mute: action.muted ? Date.now() + DEFAULT_MUTE_MS : null };
+        break;
+      case "archive":
+        mod = { archive: action.archived, lastMessages };
+        break;
+      case "mark_unread":
+        mod = { markRead: false, lastMessages };
+        break;
+    }
+    await withTimeout(socket.chatModify(mod, chatId), 20_000);
+    if (meta) {
+      if (action.action === "pin") meta.pinned = action.pinned;
+      if (action.action === "mute") meta.muted = action.muted;
+      if (action.action === "archive") meta.archived = action.archived;
+    }
     return this.chat(chatId);
   }
 
   async messages(chatId: string, limit: number): Promise<GatewayMessage[]> {
-    const chat = (await this.requireClient().getChatById(
-      chatId,
-    )) as unknown as WWebChat;
-    const messages = (await chat.fetchMessages({ limit })) as WWebMessage[];
-    return messages.map(normalizeMessage);
+    this.requireClient();
+    const messages = this.messagesByChat.get(chatId) ?? [];
+    return messages.slice(-limit);
   }
 
   async sendText(chatId: string, body: string): Promise<{ messageId: string }> {
-    const message = (await this.requireClient().sendMessage(
-      chatId,
-      body,
-    )) as WWebMessage;
-    return { messageId: normalizeMessage(message).id };
+    const socket = this.requireClient();
+    const message = await socket.sendMessage(chatId, { text: body });
+    if (!message) throw new Error("WhatsApp did not confirm the send");
+    this.recordMessage(message, false);
+    return { messageId: message.key.id ?? crypto.randomUUID() };
   }
 
   async resolveNumber(phoneNumber: string): Promise<{
@@ -398,11 +386,11 @@ export class GatewaySession extends EventEmitter {
     if (normalized.length < 7 || normalized.length > 15) {
       throw new Error("Phone number must contain 7 to 15 digits");
     }
-    const result = await this.requireClient().getNumberId(normalized);
-    const providerContactId = result?._serialized ?? null;
+    const results = await this.requireClient().onWhatsApp(normalized);
+    const match = results?.[0];
     return {
-      registered: Boolean(providerContactId),
-      providerContactId,
+      registered: Boolean(match?.exists),
+      providerContactId: match?.exists ? match.jid : null,
     };
   }
 
@@ -413,23 +401,13 @@ export class GatewaySession extends EventEmitter {
     if (!participantIds.length) {
       throw new Error("At least one participant is required");
     }
-    const result = await this.requireClient().createGroup(
+    const result = await this.requireClient().groupCreate(
       title.trim(),
       participantIds,
     );
-    const groupResult = result as unknown as
-      | string
-      | { gid?: string | { _serialized?: string }; id?: string };
-    const providerChatId =
-      typeof groupResult === "string"
-        ? groupResult
-        : typeof groupResult.gid === "string"
-          ? groupResult.gid
-          : (groupResult.gid?._serialized ?? groupResult.id);
-    if (!providerChatId) {
+    if (!result.id)
       throw new Error("WhatsApp did not return the created group id");
-    }
-    return { providerChatId };
+    return { providerChatId: result.id };
   }
 
   async sendMedia(input: {
@@ -439,19 +417,18 @@ export class GatewaySession extends EventEmitter {
     fileName?: string | null;
     caption?: string | null;
   }): Promise<{ messageId: string }> {
-    const media = new MessageMedia(
-      input.mimeType,
-      input.mediaBase64,
-      input.fileName ?? undefined,
-    );
-    const message = (await this.requireClient().sendMessage(
-      input.chatId,
-      media,
-      {
-        ...(input.caption ? { caption: input.caption } : {}),
-      },
-    )) as WWebMessage;
-    return { messageId: normalizeMessage(message).id };
+    const socket = this.requireClient();
+    const buffer = Buffer.from(input.mediaBase64, "base64");
+    const kind = mediaKindForMimeType(input.mimeType);
+    const message = await socket.sendMessage(input.chatId, {
+      [kind]: buffer,
+      mimetype: input.mimeType,
+      ...(kind === "document" ? { fileName: input.fileName ?? "file" } : {}),
+      ...(input.caption ? { caption: input.caption } : {}),
+    } as Parameters<WASocket["sendMessage"]>[1]);
+    if (!message) throw new Error("WhatsApp did not confirm the send");
+    this.recordMessage(message, false);
+    return { messageId: message.key.id ?? crypto.randomUUID() };
   }
 
   async reply(
@@ -459,88 +436,126 @@ export class GatewaySession extends EventEmitter {
     messageId: string,
     body: string,
   ): Promise<{ messageId: string }> {
-    const chat = (await this.requireClient().getChatById(
+    const target = this.rawMessages.get(messageId);
+    if (!target) throw new Error(`Message ${messageId} not found in ${chatId}`);
+    const socket = this.requireClient();
+    const message = await socket.sendMessage(
       chatId,
-    )) as unknown as WWebChat;
-    const messages = (await chat.fetchMessages({
-      limit: 100,
-    })) as WWebMessage[];
-    const target = messages.find(
-      (message) => normalizeMessage(message).id === messageId,
+      { text: body },
+      { quoted: target },
     );
-    if (!target?.reply)
-      throw new Error(`Message ${messageId} not found in ${chatId}`);
-    const reply = (await target.reply(body)) as WWebMessage;
-    return { messageId: normalizeMessage(reply).id };
+    if (!message) throw new Error("WhatsApp did not confirm the send");
+    this.recordMessage(message, false);
+    return { messageId: message.key.id ?? crypto.randomUUID() };
   }
 
   async react(messageId: string, reaction: string): Promise<{ ok: true }> {
-    const message = await this.requireClient().getMessageById(messageId);
-    if (!message?.react) throw new Error(`Message ${messageId} not found`);
-    await message.react(reaction);
+    const target = this.rawMessages.get(messageId);
+    if (!target) throw new Error(`Message ${messageId} not found`);
+    const socket = this.requireClient();
+    const chatId = target.key.remoteJid;
+    if (!chatId) throw new Error(`Message ${messageId} has no chat`);
+    await socket.sendMessage(chatId, {
+      react: { text: reaction, key: target.key },
+    });
     return { ok: true };
   }
 
   async downloadMedia(
-    chatId: string,
+    _chatId: string,
     messageId: string,
   ): Promise<{
     data: string;
     mimeType?: string;
     fileName?: string | null;
   }> {
-    const chat = (await this.requireClient().getChatById(
-      chatId,
-    )) as unknown as WWebChat;
-    const messages = (await chat.fetchMessages({
-      limit: 100,
-    })) as WWebMessage[];
-    const target = messages.find(
-      (message) => normalizeMessage(message).id === messageId,
-    );
-    if (!target?.downloadMedia)
-      throw new Error(`Media message ${messageId} not found in ${chatId}`);
-    const media = await target.downloadMedia();
-    if (!media?.data)
-      throw new Error(`Media bytes unavailable for ${messageId}`);
+    const target = this.rawMessages.get(messageId);
+    if (!target) throw new Error(`Media message ${messageId} not found`);
+    const contentType = getContentType(target.message ?? undefined);
+    const content =
+      contentType && target.message
+        ? (target.message[contentType] as
+            | { mimetype?: string; fileName?: string }
+            | undefined)
+        : undefined;
+    const buffer = await downloadMediaMessage(target, "buffer", {});
     return {
-      data: media.data,
-      mimeType: media.mimetype,
-      fileName: media.filename ?? null,
+      data: buffer.toString("base64"),
+      mimeType: content?.mimetype,
+      fileName: content?.fileName ?? null,
     };
   }
 
-  private requireClient(): WWebClient {
-    if (!this.client || this.status !== "ready") {
+  private requireClient(): WASocket {
+    if (!this.socket || this.status !== "ready") {
       throw new Error(`Session ${this.id} is not ready`);
     }
-    return this.client;
+    return this.socket;
   }
 
-  private scheduleReadyRecovery(client: WWebClient): void {
-    if (this.readyRecoveryScheduled) return;
-    this.readyRecoveryScheduled = true;
-    setTimeout(() => {
-      void (async () => {
-        try {
-          if (this.status !== "authenticating" || !client.pupPage) return;
-          await client.pupPage.evaluate(async () => {
-            const pageWindow = globalThis as unknown as {
-              AuthStore?: { AppState?: { hasSynced?: boolean } };
-              onAppStateHasSyncedEvent?: () => Promise<void>;
-            };
-            if (
-              pageWindow.AuthStore?.AppState?.hasSynced &&
-              pageWindow.onAppStateHasSyncedEvent
-            ) {
-              await pageWindow.onAppStateHasSyncedEvent();
-            }
-          });
-        } finally {
-          this.readyRecoveryScheduled = false;
-        }
-      })();
-    }, 1_000);
+  private upsertChatMeta(chat: Partial<Chat>): void {
+    const id = chat.id;
+    if (!id || !isTrackableChat(id)) return;
+    const existing = this.chatMeta.get(id);
+    const isGroup = Boolean(isJidGroup(id));
+    this.chatMeta.set(id, {
+      id,
+      isGroup,
+      name:
+        chat.name?.trim() ||
+        existing?.name ||
+        (!isGroup ? (this.contactNames.get(id) ?? null) : null),
+      participantsCount: existing?.participantsCount,
+      pinned:
+        chat.pinned != null
+          ? Boolean(chat.pinned)
+          : (existing?.pinned ?? false),
+      muted:
+        chat.muteEndTime != null
+          ? Boolean(Number(chat.muteEndTime))
+          : (existing?.muted ?? false),
+      archived: chat.archived ?? existing?.archived ?? false,
+      lastMessage: existing?.lastMessage,
+    });
+  }
+
+  private upsertContact(contact: Partial<Contact>): void {
+    const id = contact.id;
+    const name = contact.name?.trim() || contact.notify?.trim();
+    if (!id || !name) return;
+    this.contactNames.set(id, name);
+    const chat = this.chatMeta.get(id);
+    if (chat && !chat.name) chat.name = name;
+  }
+
+  private recordMessage(message: WAMessage, isHistory: boolean): void {
+    const chatId = message.key.remoteJid;
+    const id = message.key.id;
+    if (!chatId || !id || !isTrackableChat(chatId)) return;
+    this.rawMessages.set(id, message);
+
+    if (!this.chatMeta.has(chatId)) {
+      this.upsertChatMeta({ id: chatId });
+    }
+    const meta = this.chatMeta.get(chatId);
+    const timestamp = Number(message.messageTimestamp ?? 0);
+    if (
+      meta &&
+      (!meta.lastMessage || timestamp >= meta.lastMessage.messageTimestamp)
+    ) {
+      meta.lastMessage = { key: message.key, messageTimestamp: timestamp };
+    }
+
+    const normalized = normalizeMessage(message, this.contactNames);
+    if (!normalized) return;
+    const list = this.messagesByChat.get(chatId) ?? [];
+    if (!list.some((existing) => existing.id === normalized.id)) {
+      if (isHistory) list.unshift(normalized);
+      else list.push(normalized);
+      if (list.length > MAX_MESSAGES_PER_CHAT)
+        list.splice(0, list.length - MAX_MESSAGES_PER_CHAT);
+      this.messagesByChat.set(chatId, list);
+    }
   }
 
   private setStatus(status: SessionStatus): void {
@@ -549,45 +564,27 @@ export class GatewaySession extends EventEmitter {
   }
 }
 
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  mapper: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let cursor = 0;
-  const workers = Array.from(
-    { length: Math.min(concurrency, items.length) },
-    async () => {
-      while (cursor < items.length) {
-        const index = cursor;
-        cursor += 1;
-        results[index] = await mapper(items[index]!);
-      }
-    },
+// Only 1:1 chats and groups are conversations our product tracks — status
+// broadcasts, newsletters/channels, and other special jids are noise here.
+function isTrackableChat(jid: string): boolean {
+  return (
+    jid.endsWith("@g.us") ||
+    jid.endsWith("@s.whatsapp.net") ||
+    jid.endsWith("@lid")
   );
-  await Promise.all(workers);
-  return results;
 }
 
-type ChatOperationName =
-  | "pin"
-  | "unpin"
-  | "mute"
-  | "unmute"
-  | "archive"
-  | "unarchive"
-  | "markUnread";
+function mediaKindForMimeType(
+  mimeType: string,
+): "image" | "video" | "audio" | "document" {
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("video/")) return "video";
+  if (mimeType.startsWith("audio/")) return "audio";
+  return "document";
+}
 
-function requireChatMethod(
-  chat: WWebChat,
-  name: ChatOperationName,
-): () => Promise<unknown> {
-  const method = chat[name];
-  if (typeof method !== "function") {
-    throw new Error(`Connected WhatsApp session does not support ${name}`);
-  }
-  return method.bind(chat) as () => Promise<unknown>;
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function withTimeout<T>(
@@ -613,9 +610,7 @@ async function withTimeout<T>(
 export class SessionManager {
   private readonly sessions = new Map<string, GatewaySession>();
 
-  constructor(
-    private readonly opts: { dataDir: string; puppeteerArgs: string[] },
-  ) {}
+  constructor(private readonly opts: { dataDir: string }) {}
 
   list() {
     return [...this.sessions.values()].map((session) => session.snapshot());
@@ -624,12 +619,7 @@ export class SessionManager {
   getOrCreate(id: string, name = id): GatewaySession {
     let session = this.sessions.get(id);
     if (!session) {
-      session = new GatewaySession({
-        id,
-        name,
-        dataDir: this.opts.dataDir,
-        puppeteerArgs: this.opts.puppeteerArgs,
-      });
+      session = new GatewaySession({ id, name, dataDir: this.opts.dataDir });
       this.sessions.set(id, session);
     }
     return session;
@@ -642,18 +632,94 @@ export class SessionManager {
   }
 }
 
-function normalizeMessage(message: WWebMessage): GatewayMessage {
-  const id = message.id?._serialized ?? message.id?.id ?? crypto.randomUUID();
-  const chatId = message.fromMe ? message.to : message.from;
+function normalizeMessage(
+  message: WAMessage,
+  contactNames: Map<string, string>,
+): GatewayMessage | null {
+  const chatId = message.key.remoteJid;
+  const id = message.key.id;
+  if (!chatId || !id) return null;
+  const contentType = getContentType(message.message ?? undefined);
+  const content =
+    contentType && message.message ? message.message[contentType] : undefined;
+  const { type, body, hasMedia } = describeContent(contentType, content);
+  const senderId = message.key.fromMe
+    ? null
+    : (jidNormalizedUser(message.key.participant ?? chatId) ?? chatId);
+  if (senderId) {
+    const known = contactNames.get(senderId);
+    if (!known && message.pushName)
+      contactNames.set(senderId, message.pushName);
+  }
+  const contextInfo =
+    content && typeof content === "object" && "contextInfo" in content
+      ? (content.contextInfo as { stanzaId?: string | null } | null | undefined)
+      : undefined;
   return {
     id,
-    chatId: chatId ?? message.id?.remote ?? "",
-    senderId: message.author ?? message.from ?? null,
-    body: message.body ?? null,
-    type: message.type ?? "unknown",
-    timestamp: Number(message.timestamp ?? Math.floor(Date.now() / 1000)),
-    fromMe: Boolean(message.fromMe ?? message.id?.fromMe),
-    hasMedia: Boolean(message.hasMedia),
-    quotedMessageId: null,
+    chatId,
+    senderId,
+    body,
+    type,
+    timestamp: Number(
+      message.messageTimestamp ?? Math.floor(Date.now() / 1000),
+    ),
+    fromMe: Boolean(message.key.fromMe),
+    hasMedia,
+    quotedMessageId: contextInfo?.stanzaId ?? null,
   };
+}
+
+function describeContent(
+  contentType: string | undefined,
+  content: unknown,
+): { type: string; body: string | null; hasMedia: boolean } {
+  const c = content as Record<string, unknown> | undefined;
+  switch (contentType) {
+    case "conversation":
+      return {
+        type: "chat",
+        body: (content as string) ?? null,
+        hasMedia: false,
+      };
+    case "extendedTextMessage":
+      return {
+        type: "chat",
+        body: (c?.text as string) ?? null,
+        hasMedia: false,
+      };
+    case "imageMessage":
+      return {
+        type: "image",
+        body: (c?.caption as string) ?? null,
+        hasMedia: true,
+      };
+    case "videoMessage":
+      return {
+        type: "video",
+        body: (c?.caption as string) ?? null,
+        hasMedia: true,
+      };
+    case "audioMessage":
+      return { type: "audio", body: null, hasMedia: true };
+    case "documentMessage":
+      return {
+        type: "document",
+        body: (c?.caption as string) ?? (c?.fileName as string) ?? null,
+        hasMedia: true,
+      };
+    case "stickerMessage":
+      return { type: "sticker", body: null, hasMedia: true };
+    case "locationMessage":
+      return {
+        type: "location",
+        body: (c?.name as string) ?? null,
+        hasMedia: false,
+      };
+    case "contactMessage":
+    case "contactsArrayMessage":
+      return { type: "vcard", body: null, hasMedia: false };
+    default:
+      return { type: "unknown", body: null, hasMedia: false };
+  }
 }
