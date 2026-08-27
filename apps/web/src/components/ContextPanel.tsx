@@ -61,10 +61,11 @@ export function ContextPanel({
             {tickets.map((ticket) => (
               <article className={`ticket-row priority-${ticket.priority}`} key={ticket.id}>
                 <div>
-                  <strong>{ticket.id}</strong>
-                  <span>{ticket.title}</span>
+                  <strong>{ticket.title}</strong>
+                  <span>
+                    <code>#{ticket.id}</code> · {ticket.priority} · {ticket.owner}
+                  </span>
                 </div>
-                <em>{ticket.owner}</em>
               </article>
             ))}
           </div>

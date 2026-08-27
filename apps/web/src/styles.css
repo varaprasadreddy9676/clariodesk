@@ -2102,13 +2102,12 @@ button:disabled {
 
 .ticket-row {
   display: grid;
-  grid-template-columns: 1fr auto;
   gap: 8px;
   min-height: 54px;
   padding: 9px 10px;
   border: 1px solid var(--border);
   border-left-width: 3px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
 }
 
@@ -2131,7 +2130,9 @@ button:disabled {
 }
 
 .ticket-row strong {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: none;
 }
 
 .ticket-row span,
@@ -2139,6 +2140,14 @@ button:disabled {
   color: var(--text-secondary);
   font-size: 12px;
   font-style: normal;
+  text-transform: capitalize;
+}
+
+.ticket-row span code {
+  color: var(--text-muted);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  text-transform: none;
 }
 
 .facts {
