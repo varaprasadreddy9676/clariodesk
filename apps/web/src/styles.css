@@ -1,15 +1,12 @@
 :root {
   color-scheme: light;
-  /* WhatsApp uses Segoe UI / Helvetica Neue system stack */
+  /* ClarioDesk design system typeface (docs/design/design-system.md §7) */
   font-family:
-    "Segoe UI",
-    "Helvetica Neue",
-    Helvetica,
-    "Lucida Grande",
-    Arial,
-    ui-sans-serif,
-    system-ui,
+    "Inter",
     -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Text",
+    "Segoe UI",
     sans-serif;
   /* Chat header: brand in light mode, dark surface in dark mode */
   --chat-header-bg: #079455;
