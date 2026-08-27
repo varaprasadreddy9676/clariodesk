@@ -46,6 +46,10 @@ import {
   type AuthSession,
 } from "./api.js";
 import { ChannelList, type ChannelView } from "./components/ChannelList.js";
+import { Toast } from "./components/Toast.js";
+import { LottiePlayer } from "./components/LottiePlayer.js";
+import confettiBurstAnimation from "./lottie/confetti-burst.json";
+import qrPulseAnimation from "./lottie/qr-pulse.json";
 import { Composer } from "./components/Composer.js";
 import { ContextPanel } from "./components/ContextPanel.js";
 import { NotificationCenter } from "./components/NotificationCenter.js";
@@ -817,9 +821,7 @@ function Workbench({
             setTheme((value) => (value === "dark" ? "light" : "dark"))
           }
         />
-        {toast ? (
-          <div className={`toast toast-${toast.kind}`}>{toast.text}</div>
-        ) : null}
+        <Toast toast={toast} />
         {activeNav === "inbox" ? (
           channels.status === "loading" || channels.status === "idle" ? (
             <div className="inbox-grid context-closed">
@@ -1289,6 +1291,11 @@ function PhonesView({
   const [phoneResult, setPhoneResult] = useState<string | null>(null);
   const autoSyncedPhones = useRef(new Set<string>());
   const autoQrRequestedPhones = useRef(new Set<string>());
+  // Confetti plays only on an actual qr/disconnected → connected transition
+  // observed during this mount — not just from opening an already-connected
+  // phone's screen.
+  const previousPhoneStatus = useRef<string | null>(null);
+  const [justConnectedId, setJustConnectedId] = useState<string | null>(null);
 
   async function doPhoneAction(
     key: string,
@@ -1369,6 +1376,25 @@ function PhonesView({
   const legacyPhones = sortedPhones.filter(
     (phone) => phone.adapterType !== "clario_gateway",
   );
+
+  // Celebrate the moment a phone actually finishes connecting — this is the
+  // "you're all set" payoff of the whole linking flow. Only fires on a real
+  // transition witnessed during this mount, never on revisiting an
+  // already-connected phone's screen.
+  useEffect(() => {
+    const status = primaryPhone?.status ?? null;
+    const wasConnecting =
+      previousPhoneStatus.current === "qr_required" ||
+      previousPhoneStatus.current === "disconnected" ||
+      previousPhoneStatus.current === "syncing";
+    if (primaryPhone && status === "connected" && wasConnecting) {
+      setJustConnectedId(primaryPhone.id);
+      const timer = globalThis.setTimeout(() => setJustConnectedId(null), 1800);
+      previousPhoneStatus.current = status;
+      return () => globalThis.clearTimeout(timer);
+    }
+    previousPhoneStatus.current = status;
+  }, [primaryPhone]);
 
   useEffect(() => {
     if (
@@ -1469,6 +1495,11 @@ function PhonesView({
       primaryPhone.status !== "qr_required" &&
       primaryPhone.status !== "disconnected" ? (
         <article className="phone-hero">
+          {justConnectedId === primaryPhone.id ? (
+            <div className="phone-hero-confetti" aria-hidden="true">
+              <LottiePlayer animationData={confettiBurstAnimation} style={{ width: 220, height: 220 }} />
+            </div>
+          ) : null}
           <div className="phone-hero-main">
             <div
               className={`phone-hero-icon phone-hero-${primaryPhone.status}`}
@@ -1657,7 +1688,7 @@ function PhonesView({
               <img src={qrImage} alt="WhatsApp link QR code" />
             ) : (
               <div className="wa-qr-pending">
-                <QrCode size={32} aria-hidden="true" />
+                <LottiePlayer animationData={qrPulseAnimation} loop style={{ width: 64, height: 64 }} />
                 <span>Generating…</span>
               </div>
             )}
@@ -2106,13 +2137,19 @@ function notificationStatusText(state: PushPermissionState): string {
 function SetupEmpty({ onGoPhones }: { onGoPhones: () => void }) {
   return (
     <section className="page-panel center-panel">
-      <Empty
-        title="No WhatsApp chats yet"
-        body="Add or connect a linked-device phone, then sync chats from the gateway."
-      />
-      <button className="primary-action" type="button" onClick={onGoPhones}>
-        Open phone setup
-      </button>
+      <div className="setup-empty">
+        <div className="setup-empty-icon" aria-hidden="true">
+          <Smartphone size={28} />
+        </div>
+        <h2>No WhatsApp chats yet</h2>
+        <p>
+          Connect a phone to start syncing your WhatsApp conversations.
+        </p>
+        <button className="primary-action" type="button" onClick={onGoPhones}>
+          Set up a phone
+        </button>
+        <span className="setup-empty-hint">Takes about 1–2 minutes</span>
+      </div>
     </section>
   );
 }

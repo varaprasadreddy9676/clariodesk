@@ -14,6 +14,9 @@ export function Sidebar({
   collapsed: boolean;
   onToggleCollapsed: () => void;
 }) {
+  const mainItems = items.filter((item) => item.id !== "settings");
+  const settingsItem = items.find((item) => item.id === "settings");
+
   return (
     <aside className={`sidebar ${collapsed ? "is-collapsed" : ""}`} aria-label="Primary">
       <div className="brand-lockup">
@@ -32,22 +35,48 @@ export function Sidebar({
         </button>
       </div>
       <nav className="nav-list">
-        {items.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              className={`nav-item ${activeId === item.id ? "is-active" : ""}`}
-              type="button"
-              onClick={() => onSelect(item.id)}
-            >
-              <Icon size={17} aria-hidden="true" />
-              <span>{item.label}</span>
-              {item.count !== undefined ? <em>{item.count}</em> : null}
-            </button>
-          );
-        })}
+        {mainItems.map((item) => (
+          <NavButton
+            key={item.id}
+            item={item}
+            isActive={activeId === item.id}
+            onSelect={onSelect}
+          />
+        ))}
       </nav>
+      {settingsItem ? (
+        <nav className="nav-list nav-list-footer">
+          <NavButton
+            item={settingsItem}
+            isActive={activeId === settingsItem.id}
+            onSelect={onSelect}
+          />
+        </nav>
+      ) : null}
     </aside>
+  );
+}
+
+function NavButton({
+  item,
+  isActive,
+  onSelect,
+}: {
+  item: NavItem;
+  isActive: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const Icon = item.icon;
+  return (
+    <button
+      className={`nav-item ${isActive ? "is-active" : ""}`}
+      type="button"
+      title={item.label}
+      onClick={() => onSelect(item.id)}
+    >
+      <Icon size={17} aria-hidden="true" />
+      <span>{item.label}</span>
+      {item.count !== undefined ? <em>{item.count}</em> : null}
+    </button>
   );
 }

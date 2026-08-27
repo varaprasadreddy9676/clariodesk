@@ -5,7 +5,6 @@ import {
   RefreshCw,
   Smartphone,
   Sun,
-  Wifi,
 } from "lucide-react";
 import type { OpsSummary } from "../types.js";
 
@@ -27,19 +26,22 @@ export function OpsBar({
   const items = [
     {
       label: "Phones",
-      value: `${summary.connectedPhones} up / ${summary.degradedPhones} risk`,
+      value: summary.connectedPhones,
+      detail: summary.degradedPhones > 0 ? `${summary.degradedPhones} at risk` : null,
       icon: Smartphone,
       tone: summary.degradedPhones > 0 ? "warn" : "ok",
     },
     {
       label: "Waiting",
-      value: String(summary.awaitingResponses),
+      value: summary.awaitingResponses,
+      detail: null,
       icon: RefreshCw,
       tone: summary.awaitingResponses > 0 ? "info" : "ok",
     },
     {
       label: "Failed sends",
-      value: String(summary.failedOutbox),
+      value: summary.failedOutbox,
+      detail: null,
       icon: AlertCircle,
       tone: summary.failedOutbox > 0 ? "danger" : "ok",
     },
@@ -52,9 +54,10 @@ export function OpsBar({
           const Icon = item.icon;
           return (
             <div className={`ops-item ops-${item.tone}`} key={item.label}>
-              <Icon size={15} aria-hidden="true" />
-              <span>{item.label}</span>
+              <Icon size={14} aria-hidden="true" />
+              <span className="ops-item-label">{item.label}</span>
               <strong>{item.value}</strong>
+              {item.detail ? <em className="ops-item-detail">{item.detail}</em> : null}
             </div>
           );
         })}
@@ -72,17 +75,25 @@ export function OpsBar({
         </button>
         <button
           type="button"
-          className="ops-notification-button"
+          className="icon-button ops-notification-button"
           aria-label={`Notifications, ${notificationCount} unread`}
           onClick={onOpenNotifications}
         >
-          <Bell size={15} aria-hidden="true" />
-          <span aria-hidden="true">Notifications</span>
-          <strong aria-hidden="true">{notificationCount}</strong>
+          <Bell size={16} aria-hidden="true" />
+          {notificationCount > 0 ? (
+            <strong className="notification-badge">{notificationCount}</strong>
+          ) : null}
         </button>
-        <span className={`realtime-pill realtime-${realtimeStatus}`}>
-          <Wifi size={14} aria-hidden="true" />
-          {realtimeStatus}
+        <span
+          className={`realtime-pill realtime-${realtimeStatus}`}
+          role="status"
+        >
+          <span className="realtime-dot" aria-hidden="true" />
+          {realtimeStatus === "connected"
+            ? "Connected"
+            : realtimeStatus === "reconnecting"
+              ? "Reconnecting"
+              : "Disconnected"}
         </span>
       </div>
     </section>
