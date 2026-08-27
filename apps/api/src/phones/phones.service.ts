@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { and, eq, inArray } from "drizzle-orm";
 import { schema, type Database } from "@clariodesk/db";
@@ -105,21 +106,32 @@ export class PhonesService {
     assertAdmin(user);
     const phone = await this.load(user, phoneId);
     const adapter = this.adapters.forPhone(phone);
-    const result = await adapter.connect({
-      providerInstanceId: phone.providerInstanceId ?? phoneId,
-    });
-    const live = adapter.getConnectionInfo
-      ? await adapter.getConnectionInfo({
-          providerInstanceId:
-            result.providerInstanceId ?? phone.providerInstanceId ?? phoneId,
-        })
-      : {
-          status: result.qr
-            ? "qr_required"
-            : await adapter.getConnectionStatus({
-                providerInstanceId: phone.providerInstanceId ?? phoneId,
-              }),
-        };
+    let result: Awaited<ReturnType<typeof adapter.connect>>;
+    let live: { status: string; phoneNumber?: string | null };
+    try {
+      result = await adapter.connect({
+        providerInstanceId: phone.providerInstanceId ?? phoneId,
+      });
+      live = adapter.getConnectionInfo
+        ? await adapter.getConnectionInfo({
+            providerInstanceId:
+              result.providerInstanceId ?? phone.providerInstanceId ?? phoneId,
+          })
+        : {
+            status: result.qr
+              ? "qr_required"
+              : await adapter.getConnectionStatus({
+                  providerInstanceId: phone.providerInstanceId ?? phoneId,
+                }),
+          };
+    } catch (err: unknown) {
+      if (err instanceof TypeError) {
+        throw new ServiceUnavailableException(
+          "Couldn't reach the WhatsApp gateway. Make sure it's running and try again.",
+        );
+      }
+      throw err;
+    }
     const mapped = STATUS_MAP[live.status] ?? "degraded";
     await this.db
       .update(schema.phoneInstances)
