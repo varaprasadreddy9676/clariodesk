@@ -434,6 +434,7 @@ button:disabled {
       320px,
       380px
     );
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -2854,9 +2855,18 @@ button:disabled {
 
 .center-panel {
   display: grid;
+  height: 100%;
   align-content: center;
   justify-items: center;
   gap: 14px;
+}
+
+/* .primary-action carries margin-left: auto for its usual toolbar/form
+   placement — that fights justify-items: center here, so reset it for any
+   centered panel (empty states, error/retry screens, etc). */
+.center-panel .primary-action,
+.page-panel-empty .primary-action {
+  margin-left: 0;
 }
 
 .page-panel-empty {
@@ -2899,7 +2909,6 @@ button:disabled {
 
 .setup-empty .primary-action {
   margin-top: 6px;
-  margin-left: 0;
 }
 
 .setup-empty-hint {

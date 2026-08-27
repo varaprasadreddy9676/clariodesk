@@ -834,21 +834,17 @@ function Workbench({
               </div>
             </div>
           ) : channels.status === "error" ? (
-            <div className="inbox-grid context-closed">
-              <div className="channel-list-stack">
-                <div className="center-panel">
-                  <p role="alert" className="form-error">
-                    {channels.error}
-                  </p>
-                  <button
-                    type="button"
-                    className="primary-action"
-                    onClick={() => void channels.refresh()}
-                  >
-                    Retry
-                  </button>
-                </div>
-              </div>
+            <div className="page-panel center-panel">
+              <p role="alert" className="form-error">
+                {channels.error}
+              </p>
+              <button
+                type="button"
+                className="primary-action"
+                onClick={() => void channels.refresh()}
+              >
+                Retry
+              </button>
             </div>
           ) : activeChannel ? (
             <div

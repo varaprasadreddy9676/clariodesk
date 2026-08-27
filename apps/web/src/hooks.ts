@@ -5,6 +5,19 @@ export type AsyncState<T> =
   | { status: "success"; data: T; error: null }
   | { status: "error"; data: T | null; error: string };
 
+// Raw browser/JS error text ("Failed to fetch", "NetworkError...", "Load
+// failed") is technically accurate but meaningless to a user — surface a
+// plain-language message instead. API-provided error messages (validation,
+// business errors) are left as-is since those are meant to be read.
+function friendlyErrorMessage(err: unknown): string {
+  if (err instanceof TypeError) {
+    return "Couldn't reach the server. Check your connection and try again.";
+  }
+  return err instanceof Error
+    ? err.message
+    : "Something went wrong. Please try again.";
+}
+
 export function useAsyncData<T>(load: () => Promise<T>, deps: unknown[]) {
   const [state, setState] = useState<AsyncState<T>>({
     status: "idle",
@@ -27,7 +40,7 @@ export function useAsyncData<T>(load: () => Promise<T>, deps: unknown[]) {
           setState((prev) => ({
             status: "error",
             data: prev.data,
-            error: err instanceof Error ? err.message : "Request failed",
+            error: friendlyErrorMessage(err),
           }));
       });
     return () => {
@@ -45,7 +58,7 @@ export function useAsyncData<T>(load: () => Promise<T>, deps: unknown[]) {
       setState((prev) => ({
         status: "error",
         data: prev.data,
-        error: err instanceof Error ? err.message : "Request failed",
+        error: friendlyErrorMessage(err),
       }));
     }
   }, deps);
