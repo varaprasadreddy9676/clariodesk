@@ -3,7 +3,7 @@ import { loadConfig, type AppConfig } from "@clariodesk/config";
 import { createLogger, type Logger } from "@clariodesk/logger";
 import { getDb, type Database } from "@clariodesk/db";
 import { ObjectStorage } from "@clariodesk/storage";
-import { RealtimePublisher } from "@clariodesk/events";
+import { PresenceTracker, RealtimePublisher } from "@clariodesk/events";
 import {
   GatewayAdapterFactory,
   type PhoneGatewayCreds,
@@ -29,10 +29,12 @@ export type WorkerDeps = {
   db: Database;
   storage: ObjectStorage;
   realtime: RealtimePublisher;
+  presence: PresenceTracker;
   connection: RedisConnection;
   queues: {
     mediaDownloadLive: Queue;
     mediaDownloadBackfill: Queue;
+    notification: Queue;
   };
   /** Resolve a gateway adapter using a phone instance's (possibly per-phone) creds. */
   getAdapterForPhone(phone: PhoneGatewayCreds): WhatsAppGatewayAdapter;
@@ -63,12 +65,14 @@ export function buildWorkerDeps(): WorkerDeps {
   });
 
   const realtime = new RealtimePublisher(config.REDIS_URL);
+  const presence = new PresenceTracker(config.REDIS_URL);
 
   const queues = {
     mediaDownloadLive: new Queue(QUEUE.mediaDownloadLive, { connection }),
     mediaDownloadBackfill: new Queue(QUEUE.mediaDownloadBackfill, {
       connection,
     }),
+    notification: new Queue(QUEUE.notification, { connection }),
   };
 
   // Shared gateway factory — prefers per-phone creds, falls back to env defaults.
@@ -90,6 +94,7 @@ export function buildWorkerDeps(): WorkerDeps {
     db,
     storage,
     realtime,
+    presence,
     connection,
     queues,
     getAdapterForPhone: (phone) => adapterFactory.forPhone(phone),

@@ -78,6 +78,13 @@ const envSchema = z.object({
     .default(100),
   /** Per-event throttle (ms) applied while draining a reconnect storm. */
   RECONNECT_STORM_THROTTLE_MS: z.coerce.number().int().min(0).default(25),
+
+  // ── Web Push (PWA notifications) ──
+  // Optional: push is disabled (no-op) when unset, so self-hosters aren't
+  // forced to configure it. Generate with `npx web-push generate-vapid-keys`.
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().default("mailto:admin@example.com"),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

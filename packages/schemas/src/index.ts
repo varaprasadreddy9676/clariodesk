@@ -193,3 +193,19 @@ export const cursorPaginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 export type CursorPagination = z.infer<typeof cursorPaginationSchema>;
+
+/** Web Push subscription payload — matches PushSubscriptionJSON from the browser API. */
+export const pushSubscribeSchema = z.object({
+  endpoint: z.string().url(),
+  keys: z.object({
+    p256dh: z.string().min(1),
+    auth: z.string().min(1),
+  }),
+  userAgent: z.string().max(500).optional(),
+});
+export type PushSubscribeInput = z.infer<typeof pushSubscribeSchema>;
+
+export const pushUnsubscribeSchema = z.object({
+  endpoint: z.string().url(),
+});
+export type PushUnsubscribeInput = z.infer<typeof pushUnsubscribeSchema>;

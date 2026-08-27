@@ -5,7 +5,11 @@ import jwt from "jsonwebtoken";
 import { loadConfig } from "@clariodesk/config";
 import { createLogger } from "@clariodesk/logger";
 import { getDb } from "@clariodesk/db";
-import { createEventSubscriber, type RealtimeEvent } from "@clariodesk/events";
+import {
+  createEventSubscriber,
+  PresenceTracker,
+  type RealtimeEvent,
+} from "@clariodesk/events";
 import { accessibleChannelIds, type Role } from "./access.js";
 
 type JwtPayload = { sub: string; ws: string; role: Role };
@@ -38,6 +42,11 @@ async function main(): Promise<void> {
     cors: { origin: allowedOrigins, credentials: true },
   });
   const states = new WeakMap<Socket, SocketState>();
+
+  // Presence (for push-notification suppression): ref-counted so a user with
+  // multiple tabs/devices open only goes "offline" once the last one closes.
+  const presence = new PresenceTracker(config.REDIS_URL);
+  const socketCountByUser = new Map<string, number>();
 
   io.use((socket, next) => {
     const token =
@@ -83,7 +92,31 @@ async function main(): Promise<void> {
       { workspace_id: payload.ws, channel_id: undefined },
       `socket connected (${allowed === "all" ? "all channels" : `${allowed.length} channels`})`,
     );
+
+    const presenceKey = `${payload.ws}:${payload.sub}`;
+    const count = (socketCountByUser.get(presenceKey) ?? 0) + 1;
+    socketCountByUser.set(presenceKey, count);
+    if (count === 1) await presence.markOnline(payload.ws, payload.sub);
+
+    socket.on("disconnect", () => {
+      const remaining = (socketCountByUser.get(presenceKey) ?? 1) - 1;
+      if (remaining <= 0) {
+        socketCountByUser.delete(presenceKey);
+        void presence.markOffline(payload.ws, payload.sub);
+      } else {
+        socketCountByUser.set(presenceKey, remaining);
+      }
+    });
   });
+
+  // Heartbeat: refresh the presence TTL for every socket still connected so
+  // long-lived idle connections don't expire out of the online set.
+  const heartbeat = setInterval(() => {
+    for (const socket of io.sockets.sockets.values()) {
+      const state = states.get(socket);
+      if (state) void presence.markOnline(state.workspaceId, state.userId);
+    }
+  }, 30_000);
 
   // Bridge: Redis bus → permission-scoped Socket.io rooms.
   const sub = createEventSubscriber(
@@ -100,7 +133,9 @@ async function main(): Promise<void> {
 
   const shutdown = async (signal: string) => {
     logger.info({ signal }, "shutting down realtime");
+    clearInterval(heartbeat);
     await sub.quit().catch(() => undefined);
+    await presence.close().catch(() => undefined);
     io.close();
     process.exit(0);
   };

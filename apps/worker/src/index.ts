@@ -5,6 +5,7 @@ import { QUEUE } from "./queues.js";
 import { makeNormalizeProcessor } from "./processors/normalize.processor.js";
 import { makeMediaDownloadProcessor } from "./processors/media-download.processor.js";
 import { makeOutboxSendProcessor } from "./processors/outbox-send.processor.js";
+import { makeNotifyPushProcessor } from "./processors/notify-push.processor.js";
 
 /**
  * Worker runtime entrypoint (TDD §5.2). Runs the async pipeline: normalization,
@@ -46,6 +47,10 @@ async function main(): Promise<void> {
       // Serialize linked-device sends per the blast-radius rules (FRS §O.1).
       concurrency: 1,
     }),
+    new Worker(QUEUE.notification, makeNotifyPushProcessor(deps), {
+      ...connection,
+      concurrency: 4,
+    }),
   ];
 
   for (const w of workers) {
@@ -65,8 +70,10 @@ async function main(): Promise<void> {
     await Promise.all([
       deps.queues.mediaDownloadLive.close(),
       deps.queues.mediaDownloadBackfill.close(),
+      deps.queues.notification.close(),
     ]);
     await deps.realtime.close();
+    await deps.presence.close();
     process.exit(0);
   };
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
