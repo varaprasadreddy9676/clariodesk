@@ -1980,9 +1980,9 @@ button:disabled {
   width: min(360px, calc(100vw - 24px));
   max-height: min(680px, calc(100vh - 90px));
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface);
-  box-shadow: var(--shadow-popover);
+  box-shadow: var(--shadow-floating);
   overflow: hidden;
 }
 
@@ -3219,7 +3219,7 @@ button:disabled {
   min-height: 58px;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface);
 }
 
@@ -3367,20 +3367,23 @@ button:disabled {
 
 .metric {
   display: grid;
-  gap: 6px;
-  padding: 14px;
+  align-content: center;
+  gap: 8px;
+  min-height: 112px;
+  padding: 20px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-card);
 }
 
 .metric span {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .metric strong {
-  font-size: 24px;
+  font-size: 28px;
 }
 
 .mini-list {
