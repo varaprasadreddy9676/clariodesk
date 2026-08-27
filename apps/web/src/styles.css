@@ -1553,9 +1553,9 @@ button:disabled {
   gap: 2px;
   padding: 5px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
-  box-shadow: var(--shadow-popover);
+  box-shadow: var(--shadow-floating);
 }
 
 .reaction-picker button {
@@ -1844,9 +1844,9 @@ button:disabled {
   gap: 3px;
   padding: 8px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: var(--surface);
-  box-shadow: var(--shadow-popover);
+  box-shadow: var(--shadow-floating);
 }
 
 .emoji-picker button {

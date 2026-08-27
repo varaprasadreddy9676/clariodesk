@@ -26,6 +26,14 @@ const phoneTone: Record<PhoneStatus, BadgeTone> = {
   qr_required: "warn",
 };
 
+// "QR" is an acronym — text-transform: capitalize would render it "Qr".
+const phoneLabel: Record<PhoneStatus, string> = {
+  connected: "connected",
+  syncing: "syncing",
+  degraded: "degraded",
+  qr_required: "QR required",
+};
+
 export function StatusBadge({
   label,
   tone = "neutral",
@@ -57,7 +65,7 @@ export function PhoneStatusPill({ status }: { status: PhoneStatus }) {
   return (
     <span className={`phone-pill status-${phoneTone[status]}`}>
       <Icon size={13} aria-hidden="true" />
-      {status.replace("_", " ")}
+      {phoneLabel[status]}
     </span>
   );
 }
