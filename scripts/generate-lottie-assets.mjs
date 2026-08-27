@@ -12,8 +12,8 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, "..", "apps", "web", "src", "lottie");
 
-const BRAND = [0, 0.6588, 0.5176, 1]; // #00A884
-const BRAND_SOFT = [0.851, 0.992, 0.827, 1]; // #d9fdd3
+const BRAND = [0.0902, 0.698, 0.4157, 1]; // #17B26A (design-system.md)
+const BRAND_SOFT = [0.9373, 0.9882, 0.9608, 1]; // #EFFCF5
 
 function transform(overrides = {}) {
   return {

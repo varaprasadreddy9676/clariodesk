@@ -1156,15 +1156,20 @@ function TicketsView({
   return (
     <section className="page-panel">
       <PanelTitle title="Tickets" subtitle={`${tickets.length} records`} />
-      <div className="table-list">
-        {tickets.length === 0 ? (
-          <Empty
-            title="No tickets yet"
-            body="Create tickets from inbound WhatsApp messages."
-          />
-        ) : null}
-        {tickets.map((ticket) => (
-          <article className="data-row" key={ticket.id}>
+      {tickets.length === 0 ? (
+        <div className="page-panel-empty">
+          <div className="setup-empty">
+            <div className="setup-empty-icon" aria-hidden="true">
+              <Ticket size={28} />
+            </div>
+            <h2>No tickets yet</h2>
+            <p>Convert an inbound WhatsApp message into a ticket to track it here.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="table-list">
+          {tickets.map((ticket) => (
+            <article className="data-row" key={ticket.id}>
             <div>
               <strong>{ticket.title}</strong>
               <span>
@@ -1186,8 +1191,9 @@ function TicketsView({
               <option value="closed">Closed</option>
             </select>
           </article>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -1490,7 +1496,14 @@ function PhonesView({
             : "Connect one WhatsApp number to begin"
         }
       />
-      {phoneResult ? <div className="inline-result">{phoneResult}</div> : null}
+      {phoneResult ? (
+        <div
+          className={`inline-result ${/error|fail/i.test(phoneResult) ? "inline-result-error" : ""}`}
+          role={/error|fail/i.test(phoneResult) ? "alert" : "status"}
+        >
+          {phoneResult}
+        </div>
+      ) : null}
       {primaryPhone &&
       primaryPhone.status !== "qr_required" &&
       primaryPhone.status !== "disconnected" ? (

@@ -27,7 +27,7 @@ export default defineConfig(({ command }) => ({
               name: "ClarioDesk",
               short_name: "ClarioDesk",
               description: "The open-source WhatsApp team inbox",
-              theme_color: "#00a884",
+              theme_color: "#17b26a",
               background_color: "#0b141a",
               display: "standalone",
               start_url: "/",

@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, "..", "apps", "web", "public", "icons");
 
-const BRAND_COLOR = [0x00, 0xa8, 0x84]; // --brand teal-green
+const BRAND_COLOR = [0x17, 0xb2, 0x6a]; // --brand (design-system.md)
 const GLYPH_COLOR = [0xff, 0xff, 0xff];
 
 // 16x16 bitmap of a "C" glyph (1 = glyph pixel), scaled up to fill the icon.
