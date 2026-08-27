@@ -68,6 +68,11 @@ Most teams managing WhatsApp at scale face the same problem: chats scattered acr
 - Policy engine blocks duplicate sends and echo loops
 - All API keys and phone session data encrypted at rest (AES-256-GCM)
 
+**Installable app + push notifications**
+- Install as a PWA on desktop or mobile — no app store required
+- Web Push notifications for new messages when the app is closed
+- Notifications are skipped automatically for anyone already online, so you never get double-pinged
+
 **Self-hosting**
 - Single `docker compose up` deployment
 - PostgreSQL + Redis + MinIO — no managed cloud services required
@@ -149,6 +154,26 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
 
 Migrations run automatically on every deploy via the `migrate` init service.
 
+### Enabling push notifications
+
+Optional — the app works fine without it, just without background push alerts.
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Add the printed keys to your `.env` (or `deploy/.env`):
+
+```
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:you@your-domain.com
+```
+
+Users opt in from **Settings → Notifications** — the browser asks for
+permission and registers a subscription. Notifications are skipped for
+anyone already viewing the app, so no one gets double-notified.
+
 ---
 
 ## 🏗 Architecture
@@ -180,7 +205,7 @@ packages/
   logger          structured pino logging
   types           canonical domain types + NormalizedGatewayEvent
   schemas         zod request schemas
-  db              Drizzle ORM schema (24 tables, workspace-scoped)
+  db              Drizzle ORM schema (26 tables across 9 domain files, workspace-scoped)
   gateway-adapters  WhatsAppGatewayAdapter interface + runtime adapters
   policy-engine   send policy: cooldown / bulk-risk / idempotency
   crypto          AES-256-GCM field encryption

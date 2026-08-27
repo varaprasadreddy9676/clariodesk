@@ -433,6 +433,25 @@ export class ClarioApiClient {
     return this.request("/team/users", { method: "POST", body: input });
   }
 
+  pushVapidPublicKey(): Promise<{ publicKey: string | null }> {
+    return this.request("/push/vapid-public-key");
+  }
+
+  pushSubscribe(input: {
+    endpoint: string;
+    keys: { p256dh: string; auth: string };
+    userAgent?: string;
+  }): Promise<{ ok: true }> {
+    return this.request("/push/subscribe", { method: "POST", body: input });
+  }
+
+  pushUnsubscribe(endpoint: string): Promise<{ ok: true }> {
+    return this.request("/push/subscribe", {
+      method: "DELETE",
+      body: { endpoint },
+    });
+  }
+
   private async request<T>(
     path: string,
     options: {

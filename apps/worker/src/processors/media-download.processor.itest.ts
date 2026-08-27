@@ -52,10 +52,12 @@ function buildDeps(
     db,
     storage,
     realtime: {} as never,
+    presence: {} as never,
     connection: {} as never,
     queues: {
       mediaDownloadLive: {} as never,
       mediaDownloadBackfill: {} as never,
+      notification: {} as never,
     },
     getAdapterForPhone: vi.fn(() => adapter),
   } satisfies WorkerDeps;

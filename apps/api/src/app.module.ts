@@ -16,6 +16,7 @@ import { SearchModule } from "./search/search.module.js";
 import { OpsModule } from "./ops/ops.module.js";
 import { HealthController } from "./health.controller.js";
 import { ConversationsModule } from "./conversations/conversations.module.js";
+import { PushModule } from "./push/push.module.js";
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ConversationsModule } from "./conversations/conversations.module.js";
     SearchModule,
     OpsModule,
     ConversationsModule,
+    PushModule,
   ],
   controllers: [HealthController],
 })

@@ -47,3 +47,9 @@ export type OutboxSendJob = {
   workspaceId: string;
   outboxId: string;
 };
+
+export type PushNotifyJob = {
+  workspaceId: string;
+  channelId: string;
+  messageId: string;
+};

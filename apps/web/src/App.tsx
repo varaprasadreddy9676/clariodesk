@@ -55,6 +55,10 @@ import { OpsBar } from "./components/OpsBar.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { Timeline } from "./components/Timeline.js";
 import { useAsyncData, useLatestRef } from "./hooks.js";
+import {
+  usePushSubscription,
+  type PushPermissionState,
+} from "./usePushSubscription.js";
 import { useRealtimeFeed, type RealtimeEvent } from "./realtime.js";
 import {
   filterChannelsByView,
@@ -776,6 +780,23 @@ function Workbench({
     [api, channels.refresh, mappedChannels],
   );
 
+  // A tapped push notification tells the (already-open) tab to jump to the
+  // conversation, via the service worker's `notificationclick` handler.
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      const data = event.data as { type?: string; url?: string } | undefined;
+      if (data?.type !== "navigate" || !data.url) return;
+      const match = /^\/channel\/(.+)$/.exec(data.url);
+      const channelId = match?.[1];
+      if (!channelId) return;
+      setActiveNav("inbox");
+      selectChannel(channelId);
+    }
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    return () =>
+      navigator.serviceWorker?.removeEventListener("message", onMessage);
+  }, [selectChannel]);
+
   return (
     <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <Sidebar
@@ -1053,6 +1074,7 @@ function Workbench({
         {activeNav === "settings" ? (
           <SettingsView
             session={session}
+            api={api}
             onSignOut={onSignOut}
             onRefresh={() => void refreshAll()}
           />
@@ -1997,13 +2019,17 @@ function ReportsView({
 
 function SettingsView({
   session,
+  api,
   onSignOut,
   onRefresh,
 }: {
   session: AuthSession;
+  api: ClarioApiClient;
   onSignOut: () => void;
   onRefresh: () => void;
 }) {
+  const push = usePushSubscription(api);
+
   return (
     <section className="page-panel">
       <PanelTitle
@@ -2027,9 +2053,54 @@ function SettingsView({
             </button>
           </div>
         </article>
+        <article className="data-row">
+          <div>
+            <strong>Notifications</strong>
+            <span>{notificationStatusText(push.state)}</span>
+            {push.error ? (
+              <span className="form-error">{push.error}</span>
+            ) : null}
+          </div>
+          <div className="row-actions">
+            {push.state === "unsupported" ? null : push.state === "denied" ? (
+              <span>Blocked in browser settings</span>
+            ) : push.state === "granted-on" ? (
+              <button
+                type="button"
+                disabled={push.busy}
+                onClick={() => void push.disable()}
+              >
+                Turn off
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={push.busy}
+                onClick={() => void push.enable()}
+              >
+                Turn on
+              </button>
+            )}
+          </div>
+        </article>
       </div>
     </section>
   );
+}
+
+function notificationStatusText(state: PushPermissionState): string {
+  switch (state) {
+    case "unsupported":
+      return "Not supported in this browser";
+    case "denied":
+      return "Permission denied";
+    case "granted-on":
+      return "On — you'll get notified of new messages when the app is closed";
+    case "granted-off":
+      return "Off";
+    default:
+      return "Get notified of new messages when the app is closed";
+  }
 }
 
 function SetupEmpty({ onGoPhones }: { onGoPhones: () => void }) {

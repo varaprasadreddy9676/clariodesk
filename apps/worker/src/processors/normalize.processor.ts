@@ -122,6 +122,23 @@ export function makeNormalizeProcessor(deps: WorkerDeps) {
           },
         });
 
+        // Push notification: only for live inbound messages — never backfill
+        // history sync or a team member's own outbound send.
+        if (
+          event.direction === "inbound" &&
+          !outcome.classification.isBackfill
+        ) {
+          await deps.queues.notification.add(
+            QUEUE.notification,
+            {
+              workspaceId,
+              channelId: outcome.channelId,
+              messageId: outcome.messageId,
+            },
+            { attempts: 2, backoff: { type: "exponential", delay: 2000 } },
+          );
+        }
+
         for (const media of outcome.mediaToDownload) {
           await enqueueMediaDownload(deps, {
             workspaceId,
