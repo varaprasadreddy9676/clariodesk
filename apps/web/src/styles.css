@@ -196,6 +196,7 @@ button:disabled {
 
 .brand-mark {
   display: grid;
+  flex-shrink: 0;
   width: 32px;
   height: 32px;
   place-items: center;
@@ -220,6 +221,14 @@ button:disabled {
   gap: 4px;
   width: 100%;
   overflow: auto;
+}
+
+.nav-list-footer {
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  overflow: visible;
 }
 
 .nav-item,
@@ -292,74 +301,92 @@ button:disabled {
 }
 
 .ops-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
-  gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .ops-item {
-  display: grid;
-  grid-template-columns: 18px 1fr auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 32px;
   padding: 6px 10px;
-  border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface-raised);
+  background: var(--surface-muted);
   color: var(--text-secondary);
   font-size: 12px;
+  white-space: nowrap;
+}
+
+.ops-item svg {
+  align-self: center;
+}
+
+.ops-item-label {
+  color: var(--text-secondary);
 }
 
 .ops-item strong {
   color: var(--text);
   font-size: 13px;
+  font-weight: 600;
+}
+
+.ops-item-detail {
+  margin-left: 2px;
+  color: var(--warning);
+  font-size: 11px;
+  font-style: normal;
 }
 
 .ops-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   justify-self: end;
 }
 
 .ops-notification-button {
-  display: inline-grid;
-  grid-template-columns: 16px auto auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-raised);
-  color: var(--text-secondary);
-  font-weight: 600;
+  position: relative;
 }
 
-.ops-notification-button strong {
-  min-width: 22px;
-  padding: 1px 6px;
+.notification-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
   border-radius: 999px;
-  background: var(--brand-soft);
-  color: var(--brand-hover);
-  font-size: 11px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
   text-align: center;
 }
 
 .realtime-pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 34px;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
+  gap: 6px;
+  padding: 5px 10px;
   border-radius: 999px;
-  background: var(--surface-raised);
+  background: var(--surface-muted);
   color: var(--text-secondary);
   font-size: 12px;
-  text-transform: capitalize;
+  font-weight: 500;
+}
+
+.realtime-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
 }
 
 .realtime-connected {
@@ -708,6 +735,7 @@ button:disabled {
 
 .icon-button {
   display: inline-grid;
+  flex-shrink: 0;
   width: 32px;
   height: 32px;
   place-items: center;
@@ -2806,6 +2834,48 @@ button:disabled {
   gap: 14px;
 }
 
+.setup-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  max-width: 320px;
+  text-align: center;
+}
+
+.setup-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 4px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-hover);
+}
+
+.setup-empty h2 {
+  margin: 0;
+  font-size: 17px;
+  color: var(--text);
+}
+
+.setup-empty p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.setup-empty .primary-action {
+  margin-top: 6px;
+  margin-left: 0;
+}
+
+.setup-empty-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .empty-panel {
   display: grid;
   gap: 4px;
@@ -2817,6 +2887,12 @@ button:disabled {
 
 .empty-panel strong {
   color: var(--text);
+}
+
+.empty-panel-illustration {
+  display: grid;
+  place-items: center;
+  margin: 0 auto 4px;
 }
 
 .empty-panel.compact {
@@ -2938,6 +3014,7 @@ button:disabled {
 }
 
 .phone-hero {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
@@ -2947,6 +3024,16 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
+  overflow: hidden;
+}
+
+.phone-hero-confetti {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .phone-hero-main {
