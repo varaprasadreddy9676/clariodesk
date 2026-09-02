@@ -6,8 +6,10 @@ import { pino } from "pino";
 import makeWASocket, {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
+  fetchLatestWaWebVersion,
   downloadMediaMessage,
   getContentType,
+  normalizeMessageContent,
   jidNormalizedUser,
   isJidGroup,
   DisconnectReason,
@@ -78,10 +80,76 @@ const MAX_MESSAGES_PER_CHAT = 200;
 const HISTORY_SYNC_WAIT_MS = 10_000;
 const HISTORY_SYNC_POLL_MS = 300;
 const DEFAULT_MUTE_MS = 8 * 60 * 60 * 1000; // 8 hours — WhatsApp's shortest preset
+const VERSION_FETCH_TIMEOUT_MS = 5_000;
+// A recent, known-good WhatsApp Web protocol version to fall back to if the
+// remote version check is unreachable or hangs — baileys' own
+// fetchLatestBaileysVersion() has no timeout of its own and can hang the
+// whole connect() call indefinitely on a blocked/slow network.
+const FALLBACK_WA_VERSION: [number, number, number] = [2, 3000, 1023223821];
+const BROWSER_IDENTITY: [string, string, string] = [
+  "ClarioDesk",
+  "Chrome",
+  "120.0.0",
+];
+
+// Resolves the WhatsApp Web protocol version to present during the pairing
+// handshake. A stale/wrong version here is a known cause of WhatsApp
+// rejecting a new device link outright ("Couldn't link device"), so this
+// tries the most authoritative sources first:
+//   1. WhatsApp's own live service-worker version (fetchLatestWaWebVersion)
+//   2. baileys' GitHub-hosted reference version (can lag behind WhatsApp's
+//      actual deployed version by hours/days)
+//   3. a hardcoded fallback, only if both network calls are unreachable —
+//      neither fetch function has a built-in timeout, so each is raced
+//      against one here to avoid hanging connect() indefinitely.
+async function withVersionTimeout(
+  label: string,
+  fetcher: () => Promise<{
+    version: [number, number, number];
+    isLatest: boolean;
+  }>,
+): Promise<[number, number, number] | null> {
+  try {
+    const result = await Promise.race([
+      fetcher(),
+      new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), VERSION_FETCH_TIMEOUT_MS),
+      ),
+    ]);
+    if (!result) {
+      console.error(
+        `gateway: ${label} timed out after ${VERSION_FETCH_TIMEOUT_MS}ms`,
+      );
+      return null;
+    }
+    console.log(
+      `gateway: ${label} resolved WA web version ${result.version.join(".")} (isLatest=${result.isLatest})`,
+    );
+    return result.version;
+  } catch (err) {
+    console.error(`gateway: ${label} failed`, err);
+    return null;
+  }
+}
 
 let cachedVersion: Promise<[number, number, number]> | null = null;
 function getWaVersion(): Promise<[number, number, number]> {
-  cachedVersion ??= fetchLatestBaileysVersion().then((r) => r.version);
+  cachedVersion ??= (async () => {
+    const fromWaWeb = await withVersionTimeout(
+      "fetchLatestWaWebVersion",
+      fetchLatestWaWebVersion,
+    );
+    if (fromWaWeb) return fromWaWeb;
+    const fromBaileys = await withVersionTimeout(
+      "fetchLatestBaileysVersion",
+      fetchLatestBaileysVersion,
+    );
+    if (fromBaileys) return fromBaileys;
+    console.error(
+      `gateway: all WA version sources unavailable, using fallback ${FALLBACK_WA_VERSION.join(".")}`,
+    );
+    return FALLBACK_WA_VERSION;
+  })();
   return cachedVersion;
 }
 
@@ -143,9 +211,25 @@ export class GatewaySession extends EventEmitter {
     const socket = makeWASocket({
       version,
       auth: state,
+      browser: BROWSER_IDENTITY,
       logger: pino({ level: "silent" }),
+      // Baileys defaults shouldSyncHistoryMessage to `() => !!syncFullHistory`
+      // — leaving both unset (as an earlier version of this file did) means
+      // WhatsApp never sends chats, contacts, or recent messages at all, not
+      // just a full archive. Returning true here enables that initial sync;
+      // syncFullHistory itself stays false so WhatsApp only sends the recent
+      // window rather than the entire message history.
+      shouldSyncHistoryMessage: () => true,
       syncFullHistory: false,
       markOnlineOnConnect: false,
+      // Without this, WhatsApp's message-retry protocol (used whenever a
+      // recipient fails to decrypt a message on the first attempt) has
+      // nothing to resend, so the recipient's client is stuck indefinitely
+      // instead of the retry resolving in seconds.
+      getMessage: async (key) => {
+        if (!key.id) return undefined;
+        return this.rawMessages.get(key.id)?.message ?? undefined;
+      },
     });
     this.socket = socket;
 
@@ -471,10 +555,11 @@ export class GatewaySession extends EventEmitter {
   }> {
     const target = this.rawMessages.get(messageId);
     if (!target) throw new Error(`Media message ${messageId} not found`);
-    const contentType = getContentType(target.message ?? undefined);
+    const normalized = normalizeMessageContent(target.message ?? undefined);
+    const contentType = getContentType(normalized ?? undefined);
     const content =
-      contentType && target.message
-        ? (target.message[contentType] as
+      contentType && normalized
+        ? (normalized[contentType] as
             | { mimetype?: string; fileName?: string }
             | undefined)
         : undefined;
@@ -639,9 +724,14 @@ function normalizeMessage(
   const chatId = message.key.remoteJid;
   const id = message.key.id;
   if (!chatId || !id) return null;
-  const contentType = getContentType(message.message ?? undefined);
+  // Disappearing/view-once messages, edits, etc. wrap the real content one
+  // level deeper (e.g. { ephemeralMessage: { message: {...} } }) —
+  // getContentType() alone doesn't unwrap that, so it reads as an unknown
+  // message type with no body unless normalized first.
+  const normalized = normalizeMessageContent(message.message ?? undefined);
+  const contentType = getContentType(normalized ?? undefined);
   const content =
-    contentType && message.message ? message.message[contentType] : undefined;
+    contentType && normalized ? normalized[contentType] : undefined;
   const { type, body, hasMedia } = describeContent(contentType, content);
   const senderId = message.key.fromMe
     ? null
