@@ -23,18 +23,7 @@ const webhookBaseUrl =
   process.env.CLARIO_API_WEBHOOK_BASE_URL ??
   `http://localhost:${process.env.API_PORT ?? "4000"}/api`;
 
-const manager = new SessionManager({
-  dataDir,
-  puppeteerArgs: [
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-accelerated-2d-canvas",
-    "--no-first-run",
-    "--no-zygote",
-    "--disable-gpu",
-  ],
-});
+const manager = new SessionManager({ dataDir });
 
 const app = new HttpApp({ apiKey });
 
@@ -163,6 +152,20 @@ app.get(
 
 app.listen(port);
 console.log(`clario gateway listening on :${port}`);
+
+// whatsapp-web.js/puppeteer occasionally throw from internal event
+// listeners that aren't part of any promise chain we await (e.g. a page
+// reload racing an in-flight page.evaluate right after QR auth). Those
+// rejections are unhandled by definition, and Node's default is to crash
+// the whole process — killing every other linked session along with it.
+// Log and keep running instead; the session itself usually recovers on
+// the next page-load event.
+process.on("unhandledRejection", (reason) => {
+  console.error("gateway: unhandled rejection (ignored)", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("gateway: uncaught exception (ignored)", err);
+});
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`gateway received ${signal} — stopping all sessions`);

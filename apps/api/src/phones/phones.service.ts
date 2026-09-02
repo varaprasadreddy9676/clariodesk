@@ -313,7 +313,13 @@ export class PhonesService {
       const staleProviderChatIds = currentChannels
         .map((channel) => channel.providerChatId)
         .filter((providerChatId) => !seenProviderChatIds.has(providerChatId));
-      if (staleProviderChatIds.length > 0) {
+      // Only reconcile stale channels when the gateway actually returned
+      // some chats. An empty response almost always means the gateway's
+      // chat cache hasn't (re)populated yet (e.g. right after a gateway
+      // restart, before WhatsApp resends history) rather than the user
+      // genuinely having zero chats — treating it as authoritative would
+      // silently archive the whole channel list on every gateway restart.
+      if (chats.length > 0 && staleProviderChatIds.length > 0) {
         const archivedRows = await tx
           .update(schema.channels)
           .set({

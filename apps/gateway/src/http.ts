@@ -93,6 +93,7 @@ export class HttpApp {
       });
       if (!res.writableEnded) send(res, 200, result ?? {});
     } catch (err) {
+      console.error(`gateway: ${req.method} ${req.url} failed`, err);
       const message = err instanceof Error ? err.message : "request failed";
       send(res, 500, { error: "internal_error", message });
     }
