@@ -20,6 +20,7 @@ import makeWASocket, {
   type Chat,
   type Contact,
   type ChatModification,
+  type LIDMapping,
 } from "baileys";
 
 const MESSAGE_CACHE_FILENAME = "message-cache.json";
@@ -282,17 +283,42 @@ export class GatewaySession extends EventEmitter {
       }
     });
 
-    socket.ev.on("messaging-history.set", ({ chats, contacts, messages }) => {
-      for (const contact of contacts) this.upsertContact(contact);
-      for (const chat of chats) this.upsertChatMeta(chat);
-      for (const message of messages) this.recordMessage(message, false);
-      this.historySynced = true;
+    // WhatsApp is mid-migration from phone-number jids (@s.whatsapp.net) to
+    // privacy-preserving LIDs (@lid) — the same real chat can be addressed
+    // by either depending on the event, which would otherwise fragment it
+    // into two separate channels here. Baileys persists the pn<->lid
+    // mapping itself (inside the auth-state signal key store, so it
+    // survives restarts); every chat/message id is resolved through it
+    // below so both forms collapse onto one canonical (preferring
+    // phone-number) id.
+    socket.ev.on("lid-mapping.update", (mapping) => {
+      void this.mergeLidMapping(mapping);
     });
+
+    socket.ev.on(
+      "messaging-history.set",
+      ({ chats, contacts, messages, lidPnMappings }) => {
+        void (async () => {
+          for (const mapping of lidPnMappings ?? []) {
+            await this.mergeLidMapping(mapping);
+          }
+          for (const contact of contacts) this.upsertContact(contact);
+          for (const chat of chats) await this.upsertChatMeta(chat);
+          for (const message of messages)
+            await this.recordMessage(message, false);
+          this.historySynced = true;
+        })();
+      },
+    );
     socket.ev.on("chats.upsert", (chats) => {
-      for (const chat of chats) this.upsertChatMeta(chat);
+      void (async () => {
+        for (const chat of chats) await this.upsertChatMeta(chat);
+      })();
     });
     socket.ev.on("chats.update", (updates) => {
-      for (const update of updates) this.upsertChatMeta(update);
+      void (async () => {
+        for (const update of updates) await this.upsertChatMeta(update);
+      })();
     });
     socket.ev.on("contacts.upsert", (contacts) => {
       for (const contact of contacts) this.upsertContact(contact);
@@ -301,14 +327,85 @@ export class GatewaySession extends EventEmitter {
       for (const update of updates) this.upsertContact(update);
     });
     socket.ev.on("messages.upsert", ({ messages, type }) => {
-      for (const message of messages) {
-        this.recordMessage(message, type !== "notify");
-        if (type === "notify") {
-          const normalized = normalizeMessage(message, this.contactNames);
-          if (normalized) this.emit("message", normalized);
+      void (async () => {
+        for (const message of messages) {
+          const normalized = await this.recordMessage(
+            message,
+            type !== "notify",
+          );
+          if (type === "notify" && normalized) this.emit("message", normalized);
         }
-      }
+      })();
     });
+  }
+
+  // Baileys' own persistent LID<->phone-number store — falls back to a
+  // no-op (treat every id as already canonical) if a session predates
+  // `ready` or something unexpected about the socket shape changes.
+  private async canonicalJid(jid: string): Promise<string> {
+    // Strip the per-device suffix first (WhatsApp addresses the same chat
+    // as e.g. both "919...@s.whatsapp.net" and "919...:0@s.whatsapp.net"
+    // depending on the event) — jidNormalizedUser() handles this uniformly
+    // for @s.whatsapp.net, @lid, and @g.us alike.
+    const normalized = jidNormalizedUser(jid) || jid;
+    if (!normalized.endsWith("@lid") || !this.socket) return normalized;
+    try {
+      const pn =
+        await this.socket.signalRepository.lidMapping.getPNForLID(normalized);
+      // The resolved phone-number jid can itself carry a device suffix
+      // (Baileys returned e.g. "919...:0@s.whatsapp.net" here in testing) —
+      // normalize it too, or LID-addressed chats would still fragment from
+      // their @s.whatsapp.net-addressed counterpart.
+      return pn ? jidNormalizedUser(pn) || pn : normalized;
+    } catch {
+      return normalized;
+    }
+  }
+
+  // Called both from the dedicated `lid-mapping.update` event and from the
+  // `lidPnMappings` Baileys includes in the initial history-sync bundle.
+  // Retroactively merges any chat/messages already recorded under the LID
+  // onto the canonical phone-number id.
+  private async mergeLidMapping(mapping: LIDMapping): Promise<void> {
+    const lidMeta = this.chatMeta.get(mapping.lid);
+    if (!lidMeta) return; // nothing recorded under the LID yet — nothing to merge
+    const pnMeta = this.chatMeta.get(mapping.pn);
+    if (pnMeta) {
+      if (!pnMeta.name && lidMeta.name) pnMeta.name = lidMeta.name;
+      if (
+        lidMeta.lastMessage &&
+        (!pnMeta.lastMessage ||
+          lidMeta.lastMessage.messageTimestamp >
+            pnMeta.lastMessage.messageTimestamp)
+      ) {
+        pnMeta.lastMessage = lidMeta.lastMessage;
+      }
+    } else {
+      this.chatMeta.set(mapping.pn, { ...lidMeta, id: mapping.pn });
+    }
+    this.chatMeta.delete(mapping.lid);
+
+    const lidMessages = this.messagesByChat.get(mapping.lid) ?? [];
+    if (lidMessages.length > 0) {
+      const pnMessages = this.messagesByChat.get(mapping.pn) ?? [];
+      const seen = new Set<string>();
+      const merged: GatewayMessage[] = [];
+      for (const message of [
+        ...pnMessages,
+        ...lidMessages.map((m) => ({ ...m, chatId: mapping.pn })),
+      ].sort((a, b) => a.timestamp - b.timestamp)) {
+        if (seen.has(message.id)) continue;
+        seen.add(message.id);
+        merged.push(message);
+      }
+      const trimmed =
+        merged.length > MAX_MESSAGES_PER_CHAT
+          ? merged.slice(merged.length - MAX_MESSAGES_PER_CHAT)
+          : merged;
+      this.messagesByChat.set(mapping.pn, trimmed);
+      this.messagesByChat.delete(mapping.lid);
+    }
+    this.scheduleCacheFlush();
   }
 
   private scheduleReconnect(): void {
@@ -403,7 +500,7 @@ export class GatewaySession extends EventEmitter {
           const decoded = proto.WebMessageInfo.decode(
             Buffer.from(encoded, "base64"),
           );
-          this.recordMessage(decoded as WAMessage, true, false);
+          await this.recordMessage(decoded as WAMessage, true, false);
         } catch {
           // One corrupt cached message shouldn't block loading the rest.
         }
@@ -545,7 +642,7 @@ export class GatewaySession extends EventEmitter {
     const socket = this.requireClient();
     const message = await socket.sendMessage(chatId, { text: body });
     if (!message) throw new Error("WhatsApp did not confirm the send");
-    this.recordMessage(message, false);
+    await this.recordMessage(message, false);
     return { messageId: message.key.id ?? crypto.randomUUID() };
   }
 
@@ -598,7 +695,7 @@ export class GatewaySession extends EventEmitter {
       ...(input.caption ? { caption: input.caption } : {}),
     } as Parameters<WASocket["sendMessage"]>[1]);
     if (!message) throw new Error("WhatsApp did not confirm the send");
-    this.recordMessage(message, false);
+    await this.recordMessage(message, false);
     return { messageId: message.key.id ?? crypto.randomUUID() };
   }
 
@@ -616,7 +713,7 @@ export class GatewaySession extends EventEmitter {
       { quoted: target },
     );
     if (!message) throw new Error("WhatsApp did not confirm the send");
-    this.recordMessage(message, false);
+    await this.recordMessage(message, false);
     return { messageId: message.key.id ?? crypto.randomUUID() };
   }
 
@@ -665,9 +762,10 @@ export class GatewaySession extends EventEmitter {
     return this.socket;
   }
 
-  private upsertChatMeta(chat: Partial<Chat>): void {
-    const id = chat.id;
-    if (!id || !isTrackableChat(id)) return;
+  private async upsertChatMeta(chat: Partial<Chat>): Promise<void> {
+    const rawId = chat.id;
+    if (!rawId || !isTrackableChat(rawId)) return;
+    const id = await this.canonicalJid(rawId);
     const existing = this.chatMeta.get(id);
     const isGroup = Boolean(isJidGroup(id));
     this.chatMeta.set(id, {
@@ -700,18 +798,19 @@ export class GatewaySession extends EventEmitter {
     if (chat && !chat.name) chat.name = name;
   }
 
-  private recordMessage(
+  private async recordMessage(
     message: WAMessage,
     isHistory: boolean,
     persist = true,
-  ): void {
-    const chatId = message.key.remoteJid;
+  ): Promise<GatewayMessage | null> {
+    const rawChatId = message.key.remoteJid;
     const id = message.key.id;
-    if (!chatId || !id || !isTrackableChat(chatId)) return;
+    if (!rawChatId || !id || !isTrackableChat(rawChatId)) return null;
+    const chatId = await this.canonicalJid(rawChatId);
     this.rawMessages.set(id, message);
 
     if (!this.chatMeta.has(chatId)) {
-      this.upsertChatMeta({ id: chatId });
+      await this.upsertChatMeta({ id: chatId });
     }
     const meta = this.chatMeta.get(chatId);
     const timestamp = Number(message.messageTimestamp ?? 0);
@@ -723,7 +822,8 @@ export class GatewaySession extends EventEmitter {
     }
 
     const normalized = normalizeMessage(message, this.contactNames);
-    if (!normalized) return;
+    if (!normalized) return null;
+    normalized.chatId = chatId; // use the canonical (post-LID-resolution) id
     const list = this.messagesByChat.get(chatId) ?? [];
     if (!list.some((existing) => existing.id === normalized.id)) {
       if (isHistory) list.unshift(normalized);
@@ -737,6 +837,7 @@ export class GatewaySession extends EventEmitter {
       this.messagesByChat.set(chatId, list);
     }
     if (persist) this.scheduleCacheFlush();
+    return normalized;
   }
 
   private setStatus(status: SessionStatus): void {
