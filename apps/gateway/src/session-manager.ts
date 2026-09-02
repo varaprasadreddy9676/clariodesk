@@ -768,24 +768,39 @@ export class GatewaySession extends EventEmitter {
     const id = await this.canonicalJid(rawId);
     const existing = this.chatMeta.get(id);
     const isGroup = Boolean(isJidGroup(id));
+    const name =
+      chat.name?.trim() ||
+      existing?.name ||
+      (!isGroup ? (this.contactNames.get(id) ?? null) : null);
+    const pinned =
+      chat.pinned != null ? Boolean(chat.pinned) : (existing?.pinned ?? false);
+    const muted =
+      chat.muteEndTime != null
+        ? Boolean(Number(chat.muteEndTime))
+        : (existing?.muted ?? false);
+    const archived = chat.archived ?? existing?.archived ?? false;
+    if (existing) {
+      // Mutate the existing object in place rather than replacing it in the
+      // map — setChatState() holds a reference to `existing` across an
+      // `await socket.chatModify(...)` call, and WhatsApp naturally echoes
+      // an app-state sync update for the same chat right after any modify.
+      // Replacing the map entry here would silently orphan that reference,
+      // so setChatState's own pin/mute/archive write would land on a
+      // discarded object while the map kept whatever this echo produced.
+      existing.isGroup = isGroup;
+      existing.name = name;
+      existing.pinned = pinned;
+      existing.muted = muted;
+      existing.archived = archived;
+      return;
+    }
     this.chatMeta.set(id, {
       id,
       isGroup,
-      name:
-        chat.name?.trim() ||
-        existing?.name ||
-        (!isGroup ? (this.contactNames.get(id) ?? null) : null),
-      participantsCount: existing?.participantsCount,
-      pinned:
-        chat.pinned != null
-          ? Boolean(chat.pinned)
-          : (existing?.pinned ?? false),
-      muted:
-        chat.muteEndTime != null
-          ? Boolean(Number(chat.muteEndTime))
-          : (existing?.muted ?? false),
-      archived: chat.archived ?? existing?.archived ?? false,
-      lastMessage: existing?.lastMessage,
+      name,
+      pinned,
+      muted,
+      archived,
     });
   }
 
