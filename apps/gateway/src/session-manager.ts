@@ -13,6 +13,7 @@ import makeWASocket, {
   jidNormalizedUser,
   isJidGroup,
   DisconnectReason,
+  proto,
   type WASocket,
   type WAMessage,
   type WAMessageKey,
@@ -20,6 +21,11 @@ import makeWASocket, {
   type Contact,
   type ChatModification,
 } from "baileys";
+
+const MESSAGE_CACHE_FILENAME = "message-cache.json";
+// How long to wait after a message is recorded before persisting the cache
+// to disk — batches writes instead of hitting disk on every single message.
+const CACHE_FLUSH_DEBOUNCE_MS = 5_000;
 
 export type SessionStatus =
   | "created"
@@ -168,6 +174,9 @@ export class GatewaySession extends EventEmitter {
   private readonly messagesByChat = new Map<string, GatewayMessage[]>();
   private readonly rawMessages = new Map<string, WAMessage>();
   private readonly contactNames = new Map<string, string>();
+  private cacheDirty = false;
+  private cacheFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private cacheLoaded = false;
 
   constructor(input: { id: string; name: string; dataDir: string }) {
     super();
@@ -205,6 +214,10 @@ export class GatewaySession extends EventEmitter {
 
   private async launch(): Promise<void> {
     const authDir = path.resolve(this.dataDir, `session-${this.id}`);
+    if (!this.cacheLoaded) {
+      this.cacheLoaded = true;
+      await this.loadMessageCache(authDir);
+    }
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
     const version = await getWaVersion();
 
@@ -323,6 +336,8 @@ export class GatewaySession extends EventEmitter {
       await this.socket.end(undefined);
       this.socket = null;
     }
+    if (this.cacheFlushTimer) clearTimeout(this.cacheFlushTimer);
+    if (this.cacheDirty) await this.flushMessageCache();
     this.setStatus("disconnected");
   }
 
@@ -358,6 +373,78 @@ export class GatewaySession extends EventEmitter {
   private async removeAuthData(): Promise<void> {
     const dir = path.resolve(this.dataDir, `session-${this.id}`);
     await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+
+  // Baileys keeps chat/message state only in memory — unlike whatsapp-web.js,
+  // which persisted it inside its headless Chromium profile, a Baileys
+  // process restart loses everything unless we persist it ourselves. Without
+  // this, historical media downloads, quoted replies, and reactions against
+  // any message the process hadn't seen since it last started would fail
+  // with "not found", and a plain reconnect (no fresh QR) wouldn't get a
+  // resent chat list either, since WhatsApp only sends the full history sync
+  // on a first pairing. Messages are stored as their exact protobuf encoding
+  // (not JSON) so binary fields (media keys, hashes, etc.) round-trip
+  // correctly — round-tripping through JSON.stringify would corrupt them.
+  private async loadMessageCache(authDir: string): Promise<void> {
+    try {
+      const raw = await fs.readFile(
+        path.join(authDir, MESSAGE_CACHE_FILENAME),
+        "utf8",
+      );
+      const parsed = JSON.parse(raw) as {
+        messages?: string[];
+        contacts?: [string, string][];
+      };
+      for (const [jid, name] of parsed.contacts ?? []) {
+        this.contactNames.set(jid, name);
+      }
+      for (const encoded of parsed.messages ?? []) {
+        try {
+          const decoded = proto.WebMessageInfo.decode(
+            Buffer.from(encoded, "base64"),
+          );
+          this.recordMessage(decoded as WAMessage, true, false);
+        } catch {
+          // One corrupt cached message shouldn't block loading the rest.
+        }
+      }
+    } catch {
+      // No cache yet (first run) or unreadable — start fresh either way.
+    }
+  }
+
+  private scheduleCacheFlush(): void {
+    this.cacheDirty = true;
+    if (this.cacheFlushTimer) return;
+    this.cacheFlushTimer = setTimeout(() => {
+      this.cacheFlushTimer = null;
+      if (this.cacheDirty) void this.flushMessageCache();
+    }, CACHE_FLUSH_DEBOUNCE_MS);
+  }
+
+  private async flushMessageCache(): Promise<void> {
+    this.cacheDirty = false;
+    const authDir = path.resolve(this.dataDir, `session-${this.id}`);
+    try {
+      const messages = [...this.rawMessages.values()].map((message) =>
+        Buffer.from(
+          proto.WebMessageInfo.encode(
+            message as proto.IWebMessageInfo,
+          ).finish(),
+        ).toString("base64"),
+      );
+      const contacts = [...this.contactNames.entries()];
+      await fs.mkdir(authDir, { recursive: true });
+      await fs.writeFile(
+        path.join(authDir, MESSAGE_CACHE_FILENAME),
+        JSON.stringify({ messages, contacts }),
+      );
+    } catch (err) {
+      console.error(
+        `gateway: failed to persist message cache for session ${this.id}`,
+        err,
+      );
+    }
   }
 
   async chats(): Promise<
@@ -613,7 +700,11 @@ export class GatewaySession extends EventEmitter {
     if (chat && !chat.name) chat.name = name;
   }
 
-  private recordMessage(message: WAMessage, isHistory: boolean): void {
+  private recordMessage(
+    message: WAMessage,
+    isHistory: boolean,
+    persist = true,
+  ): void {
     const chatId = message.key.remoteJid;
     const id = message.key.id;
     if (!chatId || !id || !isTrackableChat(chatId)) return;
@@ -637,10 +728,15 @@ export class GatewaySession extends EventEmitter {
     if (!list.some((existing) => existing.id === normalized.id)) {
       if (isHistory) list.unshift(normalized);
       else list.push(normalized);
-      if (list.length > MAX_MESSAGES_PER_CHAT)
-        list.splice(0, list.length - MAX_MESSAGES_PER_CHAT);
+      if (list.length > MAX_MESSAGES_PER_CHAT) {
+        // Keep rawMessages bounded in step with messagesByChat — otherwise
+        // it grows forever for the life of the process.
+        const overflow = list.splice(0, list.length - MAX_MESSAGES_PER_CHAT);
+        for (const dropped of overflow) this.rawMessages.delete(dropped.id);
+      }
       this.messagesByChat.set(chatId, list);
     }
+    if (persist) this.scheduleCacheFlush();
   }
 
   private setStatus(status: SessionStatus): void {
