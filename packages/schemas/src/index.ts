@@ -195,6 +195,16 @@ export const cursorPaginationSchema = z.object({
 });
 export type CursorPagination = z.infer<typeof cursorPaginationSchema>;
 
+/** Admin-only audit trail listing (packages/db/src/schema/audit.ts). */
+export const auditLogQuerySchema = z.object({
+  beforeCreatedAtMs: z.coerce.number().int().optional(),
+  action: z.string().min(1).max(200).optional(),
+  targetType: z.string().min(1).max(100).optional(),
+  actorUserId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+export type AuditLogQuery = z.infer<typeof auditLogQuerySchema>;
+
 /** Web Push subscription payload — matches PushSubscriptionJSON from the browser API. */
 export const pushSubscribeSchema = z.object({
   endpoint: z.string().url(),

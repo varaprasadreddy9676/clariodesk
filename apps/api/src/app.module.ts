@@ -19,6 +19,7 @@ import { ConversationsModule } from "./conversations/conversations.module.js";
 import { PushModule } from "./push/push.module.js";
 import { CannedResponsesModule } from "./canned-responses/canned-responses.module.js";
 import { AiModule } from "./ai/ai.module.js";
+import { AuditLogModule } from "./audit/audit-log.module.js";
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { AiModule } from "./ai/ai.module.js";
     PushModule,
     CannedResponsesModule,
     AiModule,
+    AuditLogModule,
   ],
   controllers: [HealthController],
 })

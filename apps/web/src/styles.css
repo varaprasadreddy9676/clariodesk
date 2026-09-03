@@ -3721,6 +3721,19 @@ button:disabled {
   align-items: start;
 }
 
+.audit-log-metadata {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: var(--text-meta);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .data-row strong,
 .data-row span {
   display: block;
