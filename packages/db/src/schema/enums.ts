@@ -1,5 +1,7 @@
 import { pgEnum } from "drizzle-orm/pg-core";
 import {
+  AI_CONNECTION_STATUSES,
+  AI_PROVIDERS,
   CHANNEL_STATUSES,
   CHANNEL_TYPES,
   CONNECTION_MODES,
@@ -46,3 +48,8 @@ export const mediaSourceEnum = pgEnum("media_source", MEDIA_SOURCES);
 export const ticketStatusEnum = pgEnum("ticket_status", TICKET_STATUSES);
 export const ticketPriorityEnum = pgEnum("ticket_priority", TICKET_PRIORITIES);
 export const workspaceRoleEnum = pgEnum("workspace_role", WORKSPACE_ROLES);
+export const aiProviderEnum = pgEnum("ai_provider", AI_PROVIDERS);
+export const aiConnectionStatusEnum = pgEnum(
+  "ai_connection_status",
+  AI_CONNECTION_STATUSES,
+);

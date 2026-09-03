@@ -1,6 +1,7 @@
 import { LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 import type {
+  ApiAiConnection,
   ApiCannedResponse,
   ApiMe,
   AuthSession,
@@ -24,6 +25,8 @@ export function SettingsView({
   runAction,
   me,
   onMeChanged,
+  aiConnections,
+  onAiConnectionsChanged,
 }: {
   session: AuthSession;
   api: ClarioApiClient;
@@ -34,6 +37,8 @@ export function SettingsView({
   runAction: (action: () => Promise<void>, success: string) => Promise<void>;
   me: ApiMe | null;
   onMeChanged: () => void;
+  aiConnections: ApiAiConnection[];
+  onAiConnectionsChanged: () => void;
 }) {
   const push = usePushSubscription(api);
   const [qrTitle, setQrTitle] = useState("");
@@ -42,6 +47,13 @@ export function SettingsView({
   useEffect(() => {
     setSignature(me?.signature ?? "");
   }, [me?.signature]);
+  const [aiProvider, setAiProvider] =
+    useState<ApiAiConnection["provider"]>("anthropic");
+  const [aiLabel, setAiLabel] = useState("");
+  const [aiApiKey, setAiApiKey] = useState("");
+  const [aiBaseUrl, setAiBaseUrl] = useState("");
+  const [aiModel, setAiModel] = useState("");
+  const needsBaseUrl = aiProvider === "custom" || aiProvider === "azure_openai";
 
   return (
     <section className="page-panel">
@@ -204,6 +216,153 @@ export function SettingsView({
           ))
         )}
       </div>
+      {session.role === "admin" ? (
+        <>
+          <PanelTitle
+            title="AI providers (BYOK)"
+            subtitle="Bring your own model-provider key — no ClarioDesk feature is locked to one vendor"
+          />
+          <form
+            className="inline-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!aiLabel.trim() || !aiApiKey.trim()) return;
+              void runAction(async () => {
+                await api.createAiConnection({
+                  provider: aiProvider,
+                  label: aiLabel.trim(),
+                  apiKey: aiApiKey.trim(),
+                  ...(aiBaseUrl.trim() ? { baseUrl: aiBaseUrl.trim() } : {}),
+                  ...(aiModel.trim() ? { model: aiModel.trim() } : {}),
+                });
+                setAiLabel("");
+                setAiApiKey("");
+                setAiBaseUrl("");
+                setAiModel("");
+                onAiConnectionsChanged();
+              }, "Provider connection saved");
+            }}
+          >
+            <label className="field">
+              <span>Provider</span>
+              <select
+                value={aiProvider}
+                onChange={(event) =>
+                  setAiProvider(
+                    event.target.value as ApiAiConnection["provider"],
+                  )
+                }
+              >
+                <option value="anthropic">Anthropic</option>
+                <option value="openai">OpenAI</option>
+                <option value="google">Google</option>
+                <option value="azure_openai">Azure OpenAI</option>
+                <option value="custom">Custom / self-hosted</option>
+              </select>
+            </label>
+            <Field
+              label="Label"
+              value={aiLabel}
+              onChange={setAiLabel}
+              placeholder="e.g. Anthropic (prod)"
+            />
+            <Field
+              label="API key"
+              value={aiApiKey}
+              onChange={setAiApiKey}
+              type="password"
+              autoComplete="off"
+              placeholder="sk-..."
+            />
+            {needsBaseUrl ? (
+              <Field
+                label="Base URL"
+                value={aiBaseUrl}
+                onChange={setAiBaseUrl}
+                placeholder="https://..."
+              />
+            ) : null}
+            <Field
+              label="Model (optional)"
+              value={aiModel}
+              onChange={setAiModel}
+              placeholder="e.g. claude-sonnet-5"
+            />
+            <button
+              className="primary-action"
+              type="submit"
+              disabled={!aiLabel.trim() || !aiApiKey.trim()}
+            >
+              Connect
+            </button>
+          </form>
+          <div className="table-list">
+            {aiConnections.length === 0 ? (
+              <EmptyState
+                compact
+                title="No providers connected yet"
+                body="Connect any model provider above — nothing in ClarioDesk requires a specific one."
+              />
+            ) : (
+              aiConnections.map((conn) => (
+                <article className="data-row" key={conn.id}>
+                  <div>
+                    <strong>{conn.label}</strong>
+                    <span>
+                      {conn.provider}
+                      {conn.model ? ` · ${conn.model}` : ""} ·{" "}
+                      {conn.status === "active" ? "Active" : "Disabled"}
+                      {conn.lastHealthCheckAt
+                        ? conn.lastHealthCheckOk
+                          ? " · Connection OK"
+                          : ` · ${conn.lastHealthCheckError ?? "Connection failed"}`
+                        : ""}
+                    </span>
+                  </div>
+                  <div className="row-actions">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void runAction(async () => {
+                          await api.testAiConnection(conn.id);
+                          onAiConnectionsChanged();
+                        }, "Connection tested")
+                      }
+                    >
+                      Test
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void runAction(async () => {
+                          await api.updateAiConnection(conn.id, {
+                            status:
+                              conn.status === "active" ? "disabled" : "active",
+                          });
+                          onAiConnectionsChanged();
+                        }, "Connection updated")
+                      }
+                    >
+                      {conn.status === "active" ? "Disable" : "Enable"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void runAction(async () => {
+                          await api.deleteAiConnection(conn.id);
+                          onAiConnectionsChanged();
+                        }, "Connection removed")
+                      }
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </>
+      ) : null}
     </section>
   );
 }

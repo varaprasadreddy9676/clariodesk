@@ -159,6 +159,20 @@ export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
 export const WORKSPACE_ROLES = ["admin", "agent", "viewer"] as const;
 export type WorkspaceRole = (typeof WORKSPACE_ROLES)[number];
 
+// ── AI / BYOK (docs/ai/ai-native-byok-architecture.md) ──────────────────
+/** Model providers a workspace can bring their own key for — no vendor lock-in. */
+export const AI_PROVIDERS = [
+  "anthropic",
+  "openai",
+  "google",
+  "azure_openai",
+  "custom",
+] as const;
+export type AiProvider = (typeof AI_PROVIDERS)[number];
+
+export const AI_CONNECTION_STATUSES = ["active", "disabled"] as const;
+export type AiConnectionStatus = (typeof AI_CONNECTION_STATUSES)[number];
+
 // ── Normalized gateway event (adapter → pipeline contract) ─────────────
 
 /** A media descriptor as reported by a gateway, before download. */

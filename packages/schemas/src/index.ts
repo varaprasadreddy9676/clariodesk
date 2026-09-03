@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  AI_PROVIDERS,
   TICKET_PRIORITIES,
   TICKET_STATUSES,
   MAPPING_MODES,
@@ -233,4 +234,33 @@ export const updateCannedResponseSchema = z
   });
 export type UpdateCannedResponseInput = z.infer<
   typeof updateCannedResponseSchema
+>;
+
+// ── AI / BYOK provider connections (docs/ai/ai-native-byok-architecture.md) ──
+
+export const createAiProviderConnectionSchema = z.object({
+  provider: z.enum(AI_PROVIDERS),
+  label: z.string().min(1).max(120),
+  apiKey: z.string().min(1).max(4096),
+  baseUrl: z.string().url().max(500).optional(),
+  model: z.string().min(1).max(200).optional(),
+});
+export type CreateAiProviderConnectionInput = z.infer<
+  typeof createAiProviderConnectionSchema
+>;
+
+export const updateAiProviderConnectionSchema = z
+  .object({
+    label: z.string().min(1).max(120).optional(),
+    /** Omit to leave the stored key unchanged; pass to rotate it. */
+    apiKey: z.string().min(1).max(4096).optional(),
+    baseUrl: z.string().url().max(500).optional(),
+    model: z.string().min(1).max(200).optional(),
+    status: z.enum(["active", "disabled"]).optional(),
+  })
+  .refine((v) => Object.values(v).some((value) => value !== undefined), {
+    message: "Provide at least one field to update",
+  });
+export type UpdateAiProviderConnectionInput = z.infer<
+  typeof updateAiProviderConnectionSchema
 >;
