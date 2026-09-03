@@ -3,11 +3,13 @@ import { loadConfig } from "@clariodesk/config";
 import { createLogger } from "@clariodesk/logger";
 import { getDb, closeDb } from "@clariodesk/db";
 import { ObjectStorage } from "@clariodesk/storage";
+import { GatewayAdapterFactory } from "@clariodesk/gateway-adapters";
 import {
   checkPhoneHealth,
   purgeMedia,
   purgeMessages,
   purgeRawEvents,
+  refreshConnectedPhones,
   type JobDeps,
 } from "./jobs.js";
 
@@ -34,6 +36,17 @@ async function main(): Promise<void> {
       rawEventBucket: config.S3_BUCKET_RAW_EVENTS,
     }),
     logger,
+    adapters: new GatewayAdapterFactory({
+      defaultBaseUrl: config.CLARIO_GATEWAY_BASE_URL,
+      defaultApiKey: config.CLARIO_GATEWAY_API_KEY,
+      defaultsByAdapter: {
+        clario_gateway: {
+          baseUrl: config.CLARIO_GATEWAY_BASE_URL,
+          apiKey: config.CLARIO_GATEWAY_API_KEY,
+        },
+      },
+      encryptionKey: config.ENCRYPTION_KEY,
+    }),
     config,
   };
 
@@ -50,13 +63,18 @@ async function main(): Promise<void> {
     await purgeMedia(deps);
     await purgeMessages(deps);
   });
+  const heartbeat = safe("phone_heartbeat", () => refreshConnectedPhones(deps));
   const health = safe("phone_health", () => checkPhoneHealth(deps));
 
-  // Run once on boot, then on a cadence.
+  // Run once on boot, then on a cadence. Heartbeat runs more often than
+  // health so a connected phone's lastSeenAt stays fresh well within
+  // PHONE_STALE_MINUTES before health evaluates staleness.
   await retention();
+  await heartbeat();
   await health();
   const timers = [
     setInterval(retention, 6 * HOUR),
+    setInterval(heartbeat, 2 * MINUTE),
     setInterval(health, 5 * MINUTE),
   ];
 
