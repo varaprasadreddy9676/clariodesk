@@ -41,20 +41,22 @@ export function TicketsView({
                   {memberName(members, ticket.assignedUserId)}
                 </span>
               </div>
-              <select
-                aria-label={`Status for ${ticket.title}`}
-                value={ticket.status}
-                onChange={(event) =>
-                  void update(
-                    ticket.id,
-                    event.target.value as "open" | "pending" | "closed",
-                  )
-                }
-              >
-                <option value="open">Open</option>
-                <option value="pending">Pending</option>
-                <option value="closed">Closed</option>
-              </select>
+              <label className="data-row-control">
+                <span>Status</span>
+                <select
+                  value={ticket.status}
+                  onChange={(event) =>
+                    void update(
+                      ticket.id,
+                      event.target.value as "open" | "pending" | "closed",
+                    )
+                  }
+                >
+                  <option value="open">Open</option>
+                  <option value="pending">Pending</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </label>
             </article>
           ))}
         </div>
