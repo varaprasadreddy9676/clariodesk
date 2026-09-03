@@ -1,7 +1,9 @@
-import { Lock, Paperclip, Send, Smile, X } from "lucide-react";
+import { Lock, Paperclip, Send, Smile, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ClarioApiClient } from "../api.js";
 import type { Channel } from "../types.js";
 import { AttachmentTray } from "./AttachmentTray.js";
+import { CannedResponsePicker } from "./CannedResponsePicker.js";
 import { EmojiPicker } from "./EmojiPicker.js";
 import {
   insertAtSelection,
@@ -16,11 +18,13 @@ export type ComposerDraft = {
 };
 
 export function Composer({
+  api,
   channel,
   draft,
   onSendReply,
   onCreateNote,
 }: {
+  api: ClarioApiClient;
   channel: Channel;
   draft?: ComposerDraft | null;
   onSendReply: (input: { body: string; attachment?: File }) => Promise<void>;
@@ -30,6 +34,7 @@ export function Composer({
   const [body, setBody] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
   const [submitState, setSubmitState] = useState<"idle" | "sending">("idle");
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -87,6 +92,7 @@ export function Composer({
   function selectMode(nextMode: ComposerMode) {
     setMode(nextMode);
     setEmojiOpen(false);
+    setQuickRepliesOpen(false);
     if (nextMode === "note") setAttachment(null);
     requestAnimationFrame(() => textareaRef.current?.focus());
   }
@@ -98,6 +104,19 @@ export function Composer({
     const next = insertAtSelection(body, emoji, start, end);
     setBody(next.value);
     setEmojiOpen(false);
+    requestAnimationFrame(() => {
+      textarea?.focus();
+      textarea?.setSelectionRange(next.caret, next.caret);
+    });
+  }
+
+  function insertQuickReply(text: string) {
+    const textarea = textareaRef.current;
+    const start = textarea?.selectionStart ?? body.length;
+    const end = textarea?.selectionEnd ?? start;
+    const next = insertAtSelection(body, text, start, end);
+    setBody(next.value);
+    setQuickRepliesOpen(false);
     requestAnimationFrame(() => {
       textarea?.focus();
       textarea?.setSelectionRange(next.caret, next.caret);
@@ -207,6 +226,24 @@ export function Composer({
                   <EmojiPicker
                     onSelect={insertEmoji}
                     onClose={() => setEmojiOpen(false)}
+                  />
+                ) : null}
+              </div>
+              <div className="composer-tool-popover">
+                <button
+                  type="button"
+                  aria-label="Insert quick reply"
+                  title="Quick replies"
+                  aria-expanded={quickRepliesOpen}
+                  onClick={() => setQuickRepliesOpen((value) => !value)}
+                >
+                  <Zap size={18} />
+                </button>
+                {quickRepliesOpen ? (
+                  <CannedResponsePicker
+                    api={api}
+                    onSelect={insertQuickReply}
+                    onClose={() => setQuickRepliesOpen(false)}
                   />
                 ) : null}
               </div>

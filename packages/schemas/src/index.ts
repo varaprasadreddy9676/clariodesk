@@ -209,3 +209,23 @@ export const pushUnsubscribeSchema = z.object({
   endpoint: z.string().url(),
 });
 export type PushUnsubscribeInput = z.infer<typeof pushUnsubscribeSchema>;
+
+export const createCannedResponseSchema = z.object({
+  title: z.string().min(1).max(200),
+  body: z.string().min(1).max(4096),
+});
+export type CreateCannedResponseInput = z.infer<
+  typeof createCannedResponseSchema
+>;
+
+export const updateCannedResponseSchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    body: z.string().min(1).max(4096).optional(),
+  })
+  .refine((v) => v.title !== undefined || v.body !== undefined, {
+    message: "Provide at least one field to update",
+  });
+export type UpdateCannedResponseInput = z.infer<
+  typeof updateCannedResponseSchema
+>;

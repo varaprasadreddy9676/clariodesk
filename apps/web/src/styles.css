@@ -1946,6 +1946,81 @@ button:disabled {
   background: var(--surface-muted);
 }
 
+.canned-response-picker {
+  position: absolute;
+  z-index: 20;
+  bottom: 36px;
+  left: -34px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 280px;
+  max-height: 320px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-floating);
+}
+
+.canned-response-picker input[type="text"] {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-muted);
+  font-size: 13px;
+}
+
+.canned-response-picker ul {
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.canned-response-picker li + li {
+  margin-top: 2px;
+}
+
+.canned-response-picker li button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+}
+
+.canned-response-picker li button:hover,
+.canned-response-picker li button:focus-visible {
+  background: var(--surface-muted);
+}
+
+.canned-response-title {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.canned-response-body {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canned-response-empty {
+  padding: 10px 6px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+
 .composer-attachment {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) 30px;
@@ -2814,6 +2889,43 @@ button:disabled {
   font-size: 12px;
 }
 
+/* SearchView's search field — a labeled variant of ChannelList's pill
+   `.search-box`, so the two search inputs in the app share one visual
+   language instead of SearchView inventing a second, unlabeled style. */
+.page-search-form {
+  align-items: end;
+}
+
+.page-search-field {
+  display: grid;
+  flex: 1 1 260px;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: var(--text-label);
+}
+
+.search-input-shell {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--control-height-default);
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted);
+  color: var(--text-muted);
+}
+
+.search-input-shell input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-body-secondary);
+}
+
 .auth-form .field {
   gap: 7px;
   color: var(--text-secondary);
@@ -2956,15 +3068,22 @@ button:disabled {
   min-height: calc(100% - 40px);
 }
 
-.setup-empty {
+/* ── Shared empty-state primitive (components/States.tsx `EmptyState`) ──
+   Replaces three prior ad-hoc patterns: the local `Empty` component that
+   used to live in App.tsx, the `.setup-empty` markup TicketsView/SetupEmpty
+   hand-rolled, and each component's own `.empty-panel` div (ChannelList,
+   NotificationCenter, ContextPanel, SearchResultGroup). See
+   docs/design/redesign-implementation-guide.md finding #1. */
+.empty-state {
   display: grid;
   justify-items: center;
   gap: 10px;
   max-width: 320px;
+  margin: 0 auto;
   text-align: center;
 }
 
-.setup-empty-icon {
+.empty-state-icon {
   display: grid;
   place-items: center;
   width: 64px;
@@ -2975,52 +3094,78 @@ button:disabled {
   color: var(--brand-hover);
 }
 
-.setup-empty h2 {
-  margin: 0;
-  font-size: 17px;
+.empty-state strong {
+  font-size: var(--text-card-heading);
   color: var(--text);
 }
 
-.setup-empty p {
+.empty-state p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--text-body-secondary);
   line-height: 1.5;
 }
 
-.setup-empty .primary-action {
+.empty-state .primary-action {
   margin-top: 6px;
 }
 
-.setup-empty-hint {
+.empty-state-hint {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-meta);
 }
 
-.empty-panel {
-  display: grid;
+/* Inline/compact variant for "no results in this list" spots where a full
+   icon-circle illustration would be oversized relative to the surrounding
+   row/list/panel (channel list, notifications, context panel, search). */
+.empty-state-compact {
   gap: 4px;
+  max-width: none;
   padding: 18px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  text-align: center;
+  font-size: var(--text-body-secondary);
 }
 
-.empty-panel strong {
-  color: var(--text);
+.empty-state-compact strong {
+  font-size: var(--text-body);
 }
 
-.empty-panel-illustration {
-  display: grid;
-  place-items: center;
-  margin: 0 auto 4px;
-}
-
-.empty-panel.compact {
+.notification-panel .empty-state-compact,
+.context-panel .empty-state-compact {
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
+}
+
+/* LoadingState / ErrorState (components/States.tsx) */
+.state-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--text-secondary);
+  font-size: var(--text-body-secondary);
+}
+
+.state-box.state-error {
+  color: var(--danger);
+}
+
+.state-box button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-height-compact);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-secondary);
+}
+
+.spin {
+  animation: sync-rotate 1.2s linear infinite;
 }
 
 .inline-form,

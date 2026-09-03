@@ -17,6 +17,7 @@ import { OpsModule } from "./ops/ops.module.js";
 import { HealthController } from "./health.controller.js";
 import { ConversationsModule } from "./conversations/conversations.module.js";
 import { PushModule } from "./push/push.module.js";
+import { CannedResponsesModule } from "./canned-responses/canned-responses.module.js";
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { PushModule } from "./push/push.module.js";
     OpsModule,
     ConversationsModule,
     PushModule,
+    CannedResponsesModule,
   ],
   controllers: [HealthController],
 })

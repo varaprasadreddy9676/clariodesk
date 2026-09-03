@@ -1,4 +1,5 @@
 import type {
+  CreateCannedResponseInput,
   CreateClientInput,
   CreateInternalNoteInput,
   CreatePhoneInput,
@@ -11,6 +12,7 @@ import type {
   LoginInput,
   MapChannelInput,
   SendReplyInput,
+  UpdateCannedResponseInput,
   UpdateTicketInput,
 } from "@clariodesk/schemas";
 
@@ -101,6 +103,15 @@ export type ApiTicket = {
   assignedUserId: string | null;
   firstResponseAt?: string | null;
   createdAt: string;
+};
+
+export type ApiCannedResponse = {
+  id: string;
+  title: string;
+  body: string;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ApiCustomer = {
@@ -403,6 +414,31 @@ export class ClarioApiClient {
 
   createNote(input: CreateInternalNoteInput): Promise<{ id: string }> {
     return this.request("/notes", { method: "POST", body: input });
+  }
+
+  cannedResponses(query?: string): Promise<ApiCannedResponse[]> {
+    const qs = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : "";
+    return this.request(`/canned-responses${qs}`);
+  }
+
+  createCannedResponse(
+    input: CreateCannedResponseInput,
+  ): Promise<ApiCannedResponse> {
+    return this.request("/canned-responses", { method: "POST", body: input });
+  }
+
+  updateCannedResponse(
+    id: string,
+    input: UpdateCannedResponseInput,
+  ): Promise<ApiCannedResponse> {
+    return this.request(`/canned-responses/${id}`, {
+      method: "PATCH",
+      body: input,
+    });
+  }
+
+  deleteCannedResponse(id: string): Promise<{ ok: true }> {
+    return this.request(`/canned-responses/${id}`, { method: "DELETE" });
   }
 
   reactToMessage(id: string, reaction: string): Promise<{ ok: true }> {
