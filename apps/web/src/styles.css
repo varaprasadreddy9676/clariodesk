@@ -34,9 +34,7 @@
   --radius-lg: 16px;
   --radius-xl: 20px;
   --radius-pill: 999px;
-  --shadow-card:
-    0 1px 2px rgb(16 24 40 / 3%),
-    0 4px 12px rgb(16 24 40 / 4%);
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 3%), 0 4px 12px rgb(16 24 40 / 4%);
   --shadow-floating: 0 8px 30px rgb(16 24 40 / 10%);
   --note: #fffaeb; /* internal-note yellow (kept distinct from chat) */
   --note-border: #fedf89;
@@ -955,7 +953,10 @@ button:disabled {
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
-  transition: background 120ms, color 120ms, border-color 120ms;
+  transition:
+    background 120ms,
+    color 120ms,
+    border-color 120ms;
 }
 
 .view-tabs button.is-active {
@@ -1052,8 +1053,12 @@ button:disabled {
 }
 
 @keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 /* Divider starting after the avatar column (13px padding + 40px avatar +
@@ -1682,8 +1687,12 @@ button:disabled {
   outline: none;
 }
 
-:root:not([data-theme="dark"]) .message-context-menu button:hover:not(:disabled),
-:root:not([data-theme="dark"]) .message-context-menu button:focus-visible:not(:disabled) {
+:root:not([data-theme="dark"])
+  .message-context-menu
+  button:hover:not(:disabled),
+:root:not([data-theme="dark"])
+  .message-context-menu
+  button:focus-visible:not(:disabled) {
   background: var(--hover);
 }
 
@@ -2002,6 +2011,24 @@ button:disabled {
 
 .composer-toolbar button:hover {
   background: var(--surface-muted);
+}
+
+.composer-toolbar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.is-spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .composer-toolbar > button.is-active {
@@ -3997,7 +4024,12 @@ button:disabled {
 
   .inbox-grid.mobile-chat .timeline-header .timeline-meta,
   .inbox-grid.mobile-chat .timeline-header .timeline-meta span {
-    color: rgba(255, 255, 255, 0.70); /* fallback for Firefox <128 / Safari <16.4 */
+    color: rgba(
+      255,
+      255,
+      255,
+      0.7
+    ); /* fallback for Firefox <128 / Safari <16.4 */
     color: rgb(from var(--chat-header-text) r g b / 70%);
     font-size: 12px;
   }
@@ -4027,7 +4059,12 @@ button:disabled {
   }
 
   .inbox-grid.mobile-chat .timeline-header .icon-button:hover {
-    background: rgba(255, 255, 255, 0.12); /* fallback for Firefox <128 / Safari <16.4 */
+    background: rgba(
+      255,
+      255,
+      255,
+      0.12
+    ); /* fallback for Firefox <128 / Safari <16.4 */
     background: rgb(from var(--chat-header-text) r g b / 12%);
   }
 
