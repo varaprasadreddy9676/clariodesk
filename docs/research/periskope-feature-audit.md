@@ -259,6 +259,94 @@ ever builds broadcast (still correctly P3/deferred for now).
 
 ---
 
+## 2A. Second pass — deeper dig (Team roster, Config, notifications)
+
+Requested explicitly as a follow-up before committing to a build list. Six
+more screens, all previously unopened:
+
+### 2A.1 Settings → Team — the roster explains the "signature" fully
+The team roster is not real individual names — it's **role/shift personas
+as actual member accounts**: "L1 Team" (`arunsiva.s@ubq.in`), "L2 Team"
+(`arpitha.n@ubq.in`), "Functional Expert", "Clinical Team", "Implementation
+Onboarding Team", "Inventory Team", etc. — each a distinct login, each
+scoped to specific **Phones** and **Labels** columns (e.g. "Functional
+Expert" can only see phones/labels tagged "Implementation"), and each with
+a **Shift timings** column (actual weekly schedules, e.g. "M,T,W,T,F,S").
+
+This resolves an open question from the first pass: the "*L1 Team:*"
+message prefix isn't a dynamic per-message choice or a free-typed field —
+it's simply **that logged-in member's configured display name**, combined
+with a workspace-wide toggle (§2A.2). So a hospital-support org apparently
+runs shared/role logins rather than one login per real person. **This
+doesn't change the recommendation** — ClarioDesk's per-user signature
+(shipped this session) already produces the identical visible result for a
+workspace that names its users "L1 Team" / "L2 Team" instead of real
+names, with less new surface area than replicating a shift-scoped
+multi-persona roster. Worth doing later, cheaply: **default a new user's
+signature to their `displayName` at creation** instead of leaving it
+blank, so it works the same way out of the box.
+
+The **shift-timings** column is the concrete, real evidence behind
+PROGRESS.md's already-deferred "Coverage windows / temporary read-only
+access" (P2) — confirmed valued, not urgent.
+
+### 2A.2 Settings → Config — the one screen with real healthcare-compliance weight
+A workspace-wide "Configuration" page, most of it low-priority
+(experimental message translation, flag-lifecycle nuance) — but three
+toggles matter specifically **because this account's chats are hospitals
+talking about patients**:
+
+- **"Show Sender Names"** (ON in this workspace) — confirms §2A.1: this is
+  an admin-controlled, workspace-wide switch, not a per-message opt-in.
+  Worth adding to ClarioDesk as a workspace-level admin default (auto-sign
+  every reply when ON) layered on top of the existing per-message toggle,
+  rather than replacing it.
+- **"Mask User Phone Numbers"** — hides the customer's phone number from
+  agents in the UI. Real privacy control for any team handling patient
+  contact details.
+- **"Media Privacy"** — org-scoped, expiring media links; "when disabled,
+  anyone with a media link can access it." ClarioDesk's media URLs are
+  already signed + permission-checked (an implicit yes here), but there's
+  no admin-configurable expiry, and worth explicitly confirming they're
+  never accessible outside the workspace.
+
+None of these are hard to build (each is a boolean/short-lived-signed-URL
+setting) and they're the only items in this entire audit that map directly
+to handling real patient-adjacent data responsibly — arguably higher
+priority than their "just a nice setting" framing suggests, given who
+ClarioDesk's actual first user is.
+
+### 2A.3 Settings → Custom Properties — real, but *unused* even here
+A full custom-field builder (arbitrary structured fields on a Chat or
+Ticket, grouped into sections). In this real, actively-used production
+workspace: **zero properties have been configured.** This is useful
+negative evidence — it's a real Periskope feature nobody bothered to set
+up, unlike labels (3 defined, used on every row) or quick replies (4
+defined, used constantly). **Recommendation: do not build this** — it's
+exactly the kind of "impressive-sounding but unused" feature that would be
+wasted effort right now.
+
+### 2A.4 Settings → Group Settings — group creation templates
+A "Group Templates" feature (e.g. a saved "New Customer" template with a
+default participant set) so onboarding hospital #31 doesn't require
+re-remembering which internal people to add every time. Real and in use
+(one template configured, last updated). Minor, cheap enhancement to
+ClarioDesk's existing `NewGroupDialog` whenever it's next touched — not
+urgent on its own.
+
+### 2A.5 Settings → Alerts & Notifications — assignment is a first-class notification
+Granular per-event-type toggles: New Messages, New Private Note, **Ticket
+Assignment, Task Assignment, Chat Assignment** (all on), plus separate
+email-alert toggles (Broadcast Emails, Ticket Assignment Emails). The
+existence of a dedicated **"Chat Assignment"** notification type is
+further confirmation of recommendation #3 below (chat-level assignment) —
+it's important enough in the real tool to have its own notification, not
+just a ticket-level one. Otherwise this matches PROGRESS.md's already-
+deferred "Notification preferences, quiet hours..." (P2) — confirmed
+valued, no change to priority.
+
+---
+
 ## 3. Prioritized recommendation for ClarioDesk
 
 Ranked by evidence-of-real-use ÷ implementation risk, using the same
@@ -273,15 +361,26 @@ P0–P4 scheme as `docs/PROGRESS.md`:
 | 5 | Time-series + per-agent analytics (tickets closed, first-response time, active chats) | Whole dedicated Analytics section, actively referenced | Medium — needs aggregation queries/materialized views, more surface area | Medium (matches PROGRESS.md P2 "basic analytics", now confirmed valuable) |
 | 6 | Tabular/bulk "Chat List" admin view (spreadsheet of all channels with bulk label/assign) | A whole separate nav item from the normal inbox | Medium — new view, but built on data ClarioDesk already has | Medium |
 | 7 | Auto-generated ticket-status PDF/report | Explains the exact broadcast message pattern found in real usage | Medium — needs a PDF-generation step in the worker/API | Lower — nice-to-have, not blocking |
-| 8 | Quick-reply refinements: slash-command auto-trigger, per-reply access scoping | Both present but incremental over what already shipped | Low | Low — cheap follow-on whenever touching Quick Replies again |
-| 9 | Bulk broadcast messaging | Actively used in production (daily status update to 7+ groups) | **High** — WhatsApp ban/spam risk without rate-limiting+jitter, already correctly flagged P3 in PROGRESS.md | Do not build yet |
-| 10 | Automation rule builder | 2 live rules in production | **High** — a genuine rule engine, largest scope item here | Do not build yet (P2/P3, correctly deferred) |
-| 11 | Granular per-action/per-screen RBAC | Full settings page dedicated to it | **High** — replaces the entire fixed-role model | Do not build yet (P4, correctly deferred) |
-| 12 | AI agent / auto-flagging | Paywalled even in the reference product | High, and explicitly out of scope | Do not build yet (P3, correctly deferred) |
+| 8 | **Privacy: mask customer phone numbers + confirm/expire media-link access** | Dedicated Config toggles in the real tool; this account's chats are hospitals discussing patients | Low — boolean setting + confirming existing signed-URL expiry, no new subsystem | High — healthcare-adjacent data, worth doing alongside #1–3, not after |
+| 9 | Workspace-level "always sign outbound replies" admin toggle, layered on the per-message toggle already shipped | Confirmed as an org-wide default in the real tool, not per-message | Very low — one boolean read in the composer | Low-medium — cheap, do whenever back in that code |
+| 10 | Quick-reply refinements: slash-command auto-trigger, per-reply access scoping | Both present but incremental over what already shipped | Low | Low — cheap follow-on whenever touching Quick Replies again |
+| 11 | Group-creation templates (saved default participant sets) | One real template in active use | Low-medium — extends existing `NewGroupDialog` | Low — nice-to-have |
+| — | ~~Custom Properties (arbitrary custom fields per chat/ticket)~~ | **Zero properties configured even in this real, active workspace** | — | **Do not build** — real feature, unused even by its own users; wasted effort right now |
+| 12 | Bulk broadcast messaging | Actively used in production (daily status update to 7+ groups) | **High** — WhatsApp ban/spam risk without rate-limiting+jitter, already correctly flagged P3 in PROGRESS.md | Do not build yet |
+| 13 | Automation rule builder | 2 live rules in production | **High** — a genuine rule engine, largest scope item here | Do not build yet (P2/P3, correctly deferred) |
+| 14 | Granular per-action/per-screen RBAC + shift-scoped roster (phones/labels/schedule per member) | Full settings pages dedicated to both | **High** — replaces the entire fixed-role model | Do not build yet (P4, correctly deferred) |
+| 15 | AI agent / auto-flagging | Paywalled even in the reference product | High, and explicitly out of scope | Do not build yet (P3, correctly deferred) |
 
 **Bottom line:** items 1–2 are safe to build immediately (no send-risk,
 small schema surface, directly evidenced). Item 3 is the natural next step
-after labels since it reuses `channelAssignments` that already exists.
-Items 9–12 are the biggest, riskiest, or most infrastructure-heavy asks
-seen in the real tool, and PROGRESS.md was already correct to defer every
-one of them — this audit found no reason to move any of them up.
+after labels since it reuses `channelAssignments` that already exists, and
+the real tool treats chat-assignment as important enough to have its own
+notification type. Item 8 (privacy toggles) punches above its "just a
+setting" weight given this specific account handles patient-adjacent
+hospital conversations — worth bundling in alongside #1–3 rather than
+waiting. Custom Properties is the one feature in this whole audit with
+**negative** evidence — real, but unused even by the team that has it —
+and should stay unbuilt. Items 12–15 remain the biggest, riskiest, or most
+infrastructure-heavy asks seen in the real tool, and PROGRESS.md was
+already correct to defer every one of them — this deeper pass found no
+reason to move any of them up either.
