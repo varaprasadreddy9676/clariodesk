@@ -179,6 +179,115 @@ describe("GatewaySession conversation operations", () => {
   });
 });
 
+describe("GatewaySession.chats / groups", () => {
+  function withChatMeta(
+    session: ReturnType<typeof readySession>,
+    id: string,
+    meta: Record<string, unknown>,
+  ) {
+    const internals = session as unknown as {
+      chatMeta: Map<string, unknown>;
+    };
+    internals.chatMeta.set(id, meta);
+  }
+
+  it("actively fetches a group's subject when the cache doesn't have it", async () => {
+    const groupMetadata = vi.fn(async () => ({ subject: "Real Group Name" }));
+    const session = readySession({ groupMetadata });
+    withChatMeta(session, "999@g.us", {
+      id: "999@g.us",
+      isGroup: true,
+      name: null,
+      pinned: false,
+      muted: false,
+      archived: false,
+    });
+
+    const groups = await session.groups();
+
+    expect(groupMetadata).toHaveBeenCalledWith("999@g.us");
+    expect(groups).toEqual([
+      { id: "999@g.us", name: "Real Group Name", avatarUrl: null },
+    ]);
+  });
+
+  it("leaves the name null when the metadata fetch fails, without breaking the sync", async () => {
+    const groupMetadata = vi.fn(async () => {
+      throw new Error("not a participant");
+    });
+    const session = readySession({ groupMetadata });
+    withChatMeta(session, "999@g.us", {
+      id: "999@g.us",
+      isGroup: true,
+      name: null,
+      pinned: false,
+      muted: false,
+      archived: false,
+    });
+
+    const groups = await session.groups();
+
+    expect(groups).toEqual([{ id: "999@g.us", name: null, avatarUrl: null }]);
+  });
+
+  it("does not re-fetch a group whose name is already known", async () => {
+    const groupMetadata = vi.fn(async () => ({
+      subject: "Should not be used",
+    }));
+    const session = readySession({ groupMetadata });
+    withChatMeta(session, "999@g.us", {
+      id: "999@g.us",
+      isGroup: true,
+      name: "Already Known",
+      pinned: false,
+      muted: false,
+      archived: false,
+    });
+
+    const groups = await session.groups();
+
+    expect(groupMetadata).not.toHaveBeenCalled();
+    expect(groups[0]?.name).toBe("Already Known");
+  });
+
+  it("chats() — the method 'Sync now' actually calls — also resolves an unnamed group's subject", async () => {
+    const groupMetadata = vi.fn(async () => ({
+      subject: "Resolved via chats()",
+    }));
+    const session = readySession({ groupMetadata });
+    withChatMeta(session, "999@g.us", {
+      id: "999@g.us",
+      isGroup: true,
+      name: null,
+      pinned: false,
+      muted: false,
+      archived: false,
+    });
+
+    const chats = await session.chats();
+
+    expect(groupMetadata).toHaveBeenCalledWith("999@g.us");
+    expect(chats[0]?.name).toBe("Resolved via chats()");
+  });
+
+  it("chats() never actively fetches a direct chat's name (no group metadata to resolve)", async () => {
+    const groupMetadata = vi.fn(async () => ({ subject: "Unused" }));
+    const session = readySession({ groupMetadata });
+    withChatMeta(session, "919876543210@s.whatsapp.net", {
+      id: "919876543210@s.whatsapp.net",
+      isGroup: false,
+      name: null,
+      pinned: false,
+      muted: false,
+      archived: false,
+    });
+
+    await session.chats();
+
+    expect(groupMetadata).not.toHaveBeenCalled();
+  });
+});
+
 describe("GatewaySession message normalization", () => {
   function waMessage(over: Record<string, unknown> = {}) {
     return {

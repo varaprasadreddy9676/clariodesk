@@ -561,9 +561,20 @@ export class GatewaySession extends EventEmitter {
     ) {
       await sleep(HISTORY_SYNC_POLL_MS);
     }
-    return [...this.chatMeta.values()].map((chat) => ({
+    const chats = [...this.chatMeta.values()];
+    // The passive chats.upsert/update cache doesn't always carry a group's
+    // subject (quiet/older groups in particular) — this is an explicit sync
+    // action (fetchChats(), behind "Sync now"), so it's worth an active
+    // fetch for whichever groups are still unnamed, rather than leaving them
+    // to show a placeholder indefinitely.
+    await Promise.all(
+      chats
+        .filter((chat) => chat.isGroup && !chat.name)
+        .map((chat) => this.resolveGroupSubject(chat.id)),
+    );
+    return chats.map((chat) => ({
       id: chat.id,
-      name: chat.name,
+      name: this.chatMeta.get(chat.id)?.name ?? chat.name,
       avatarUrl: null,
       participantsCount: chat.participantsCount,
       channelType: chat.isGroup ? ("group" as const) : ("direct" as const),
@@ -579,6 +590,19 @@ export class GatewaySession extends EventEmitter {
         avatarUrl: chat.avatarUrl,
         participantsCount: chat.participantsCount,
       }));
+  }
+
+  private async resolveGroupSubject(groupId: string): Promise<void> {
+    const socket = this.socket;
+    if (!socket) return;
+    try {
+      const metadata = await socket.groupMetadata(groupId);
+      if (metadata.subject)
+        await this.upsertChatMeta({ id: groupId, name: metadata.subject });
+    } catch {
+      // Not a member anymore, rate-limited, or otherwise unreachable — leave
+      // the name unknown rather than fail the whole sync over one group.
+    }
   }
 
   async chat(chatId: string): Promise<GatewayChatState> {
