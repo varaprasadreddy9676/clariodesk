@@ -27,7 +27,10 @@ afterAll(async () => {
   await container?.stop();
 });
 
-async function seedWorkspace(): Promise<{ workspaceId: string; userId: string }> {
+async function seedWorkspace(): Promise<{
+  workspaceId: string;
+  userId: string;
+}> {
   const workspaceId = randomUUID();
   const userId = randomUUID();
   await db.insert(schema.workspaces).values({
