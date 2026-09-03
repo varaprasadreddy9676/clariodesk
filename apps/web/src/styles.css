@@ -59,6 +59,38 @@
   --system-text: #5b5340;
   --bubble-fade: rgb(0 0 0 / 8%);
   --bubble-fade-out: rgb(6 95 70 / 10%);
+
+  /* ── Apple/macOS-inspired redesign tokens (docs/design/redesign-checklist.md) ──
+     Desktop-enterprise type scale — normal text stays 13-14px; nothing here
+     exists to make headings bigger, only to make sizing consistent. */
+  --text-page-title: 22px;
+  --text-section-heading: 17px;
+  --text-card-heading: 15px;
+  --text-body: 14px;
+  --text-body-secondary: 13px;
+  --text-label: 12px;
+  --text-meta: 11px;
+
+  /* 4px spacing grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Frosted-glass surfaces — nav, floating toolbars, composer, search,
+     modal headers only. Never a general content-surface background. */
+  --glass-bg: rgb(255 255 255 / 72%);
+  --glass-border: rgb(16 24 40 / 8%);
+  --glass-blur: 20px;
+
+  /* Shared control heights so buttons/inputs/search stop drifting per
+     screen. Buttons 32-38px, inputs 36-40px per the design brief. */
+  --control-height-compact: 32px;
+  --control-height-default: 36px;
+  --control-height-comfortable: 40px;
 }
 
 /* ── ClarioDesk dark theme (docs/design/design-system.md §34) ──────────── */
@@ -101,6 +133,9 @@
   --system-text: #b8bcc4;
   --bubble-fade: rgb(0 0 0 / 32%);
   --bubble-fade-out: rgb(0 0 0 / 32%);
+
+  --glass-bg: rgb(23 25 28 / 72%);
+  --glass-border: rgb(255 255 255 / 8%);
 }
 
 * {
@@ -266,10 +301,17 @@ button:disabled {
   justify-items: center;
 }
 
-.nav-item:hover,
+/* Hover and active must read as distinct states — a hover on a different
+   item shouldn't look identical to "this is where I am". */
+.nav-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
 .nav-item.is-active {
   background: var(--brand-soft);
   color: var(--brand-hover);
+  font-weight: 600;
 }
 
 .nav-item em {
@@ -297,8 +339,10 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  border-bottom: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .mobile-brand,
