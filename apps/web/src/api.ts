@@ -151,6 +151,18 @@ export type ApiContactSummary = {
   canonicalName: string;
 };
 
+export type ApiAuditLogEntry = {
+  id: string;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  actorUserId: string | null;
+  actorName: string | null;
+  actorEmail: string | null;
+};
+
 export type ApiAiConnection = {
   id: string;
   provider: "anthropic" | "openai" | "google" | "azure_openai" | "custom";
@@ -489,6 +501,25 @@ export class ClarioApiClient {
 
   search(q: string): Promise<SearchResult> {
     return this.request(`/search?q=${encodeURIComponent(q)}`);
+  }
+
+  auditLogs(
+    filters: {
+      beforeCreatedAtMs?: number;
+      action?: string;
+      targetType?: string;
+      actorUserId?: string;
+    } = {},
+  ): Promise<ApiAuditLogEntry[]> {
+    const params = new URLSearchParams();
+    if (filters.beforeCreatedAtMs !== undefined) {
+      params.set("beforeCreatedAtMs", String(filters.beforeCreatedAtMs));
+    }
+    if (filters.action) params.set("action", filters.action);
+    if (filters.targetType) params.set("targetType", filters.targetType);
+    if (filters.actorUserId) params.set("actorUserId", filters.actorUserId);
+    const qs = params.toString();
+    return this.request(`/audit-logs${qs ? `?${qs}` : ""}`);
   }
 
   searchContactsForNewChat(query: string): Promise<ApiContactSummary[]> {

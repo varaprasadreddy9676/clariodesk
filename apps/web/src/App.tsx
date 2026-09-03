@@ -2,6 +2,7 @@ import {
   BarChart3,
   Eye,
   EyeOff,
+  FileClock,
   Inbox,
   LockKeyhole,
   MessageCircleMore,
@@ -60,6 +61,7 @@ import { PhonesView } from "./views/PhonesView.js";
 import { ClientsView } from "./views/ClientsView.js";
 import { TeamView } from "./views/TeamView.js";
 import { ReportsView } from "./views/ReportsView.js";
+import { AuditLogView } from "./views/AuditLogView.js";
 import { SettingsView } from "./views/SettingsView.js";
 import { SetupEmpty } from "./views/SetupEmpty.js";
 
@@ -84,6 +86,7 @@ const navIcons = {
   clients: Shield,
   team: Users,
   reports: BarChart3,
+  audit: FileClock,
   settings: Settings,
 };
 
@@ -452,8 +455,8 @@ function Workbench({
     [timeline.data],
   );
   const navItems = useMemo(
-    () => buildNavItems(ops.data, tickets.data ?? []),
-    [ops.data, tickets.data],
+    () => buildNavItems(ops.data, tickets.data ?? [], session.role),
+    [ops.data, tickets.data, session.role],
   );
   const uiOps = toUiOps(ops.data);
 
@@ -1086,6 +1089,7 @@ function Workbench({
         {activeNav === "reports" ? (
           <ReportsView ops={ops.data} onRefresh={() => void refreshAll()} />
         ) : null}
+        {activeNav === "audit" ? <AuditLogView api={api} /> : null}
         {activeNav === "settings" ? (
           <SettingsView
             session={session}
@@ -1164,6 +1168,7 @@ function Workbench({
 function buildNavItems(
   ops: ApiOpsSummary | null,
   tickets: ApiTicket[],
+  role: string,
 ): NavItem[] {
   return [
     {
@@ -1183,6 +1188,9 @@ function buildNavItems(
     { id: "clients", label: "Clients", icon: navIcons.clients },
     { id: "team", label: "Team", icon: navIcons.team },
     { id: "reports", label: "Reports", icon: navIcons.reports },
+    ...(role === "admin"
+      ? [{ id: "audit", label: "Audit log", icon: navIcons.audit }]
+      : []),
     { id: "settings", label: "Settings", icon: navIcons.settings },
   ];
 }
