@@ -8,7 +8,7 @@ import {
   User,
   Users,
 } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Channel } from "../types.js";
 import type { ChannelView } from "../lib/whatsapp-sort.js";
@@ -53,6 +53,19 @@ export function ChannelList({
     estimateSize: () => 72,
     overscan: 8,
   });
+
+  // On mobile, this panel is toggled via CSS display:none (swapping to the
+  // active conversation), not unmounted — going from display:none back to
+  // visible didn't reliably re-fire the virtualizer's own ResizeObserver,
+  // leaving it stuck believing the scroll container was still 0×0 and
+  // rendering nothing. Re-measuring on every size change guards against it.
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const observer = new ResizeObserver(() => rowVirtualizer.measure());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [rowVirtualizer]);
 
   function startLongPress(channel: Channel, e: React.TouchEvent) {
     longPressFired.current = false;

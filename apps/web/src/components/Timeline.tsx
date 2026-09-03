@@ -300,32 +300,34 @@ export function Timeline({
       ) : null}
 
       <div className="message-scroll" role="log" aria-live="polite">
-        {messages.length > 0 ? (
-          <div className="day-divider">
-            <span>Today</span>
-          </div>
-        ) : null}
-        {messages.length === 0 ? (
-          <div className="conversation-empty">
-            <Inbox size={28} aria-hidden="true" />
-            <strong>No messages imported for this chat yet</strong>
-            <span>
-              Chat discovery is working. Recent history will load automatically
-              when the gateway supports it; live messages appear here in real
-              time.
-            </span>
-          </div>
-        ) : null}
-        {messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            onCreateTicket={onCreateTicket}
-            onOpenMenu={openMenu}
-            onResolveMediaUrl={onResolveMediaUrl}
-            showAuthor={channel.channelType === "group"}
-          />
-        ))}
+        <div className="message-scroll-inner">
+          {messages.length > 0 ? (
+            <div className="day-divider">
+              <span>Today</span>
+            </div>
+          ) : null}
+          {messages.length === 0 ? (
+            <div className="conversation-empty">
+              <Inbox size={28} aria-hidden="true" />
+              <strong>No messages imported for this chat yet</strong>
+              <span>
+                Chat discovery is working. Recent history will load
+                automatically when the gateway supports it; live messages
+                appear here in real time.
+              </span>
+            </div>
+          ) : null}
+          {messages.map((message) => (
+            <MessageBubble
+              key={message.id}
+              message={message}
+              onCreateTicket={onCreateTicket}
+              onOpenMenu={openMenu}
+              onResolveMediaUrl={onResolveMediaUrl}
+              showAuthor={channel.channelType === "group"}
+            />
+          ))}
+        </div>
       </div>
       {menu ? (
         <MessageContextMenu
@@ -480,9 +482,13 @@ function MessageBubble({
   const isRead = (message.status ?? "").toLowerCase() === "read";
   const emojiOnly =
     message.media.length === 0 && isEmojiOnlyMessage(message.body);
+  const stickerOnly =
+    !message.body &&
+    message.media.length === 1 &&
+    message.media[0]?.mediaType === "sticker";
   return (
     <article
-      className={`message-bubble message-${message.kind}${emojiOnly ? " message-emoji-only" : ""}`}
+      className={`message-bubble message-${message.kind}${emojiOnly ? " message-emoji-only" : ""}${stickerOnly ? " message-sticker-only" : ""}`}
       onContextMenu={(event) => {
         event.preventDefault();
         onOpenMenu(message, event.clientX, event.clientY);
