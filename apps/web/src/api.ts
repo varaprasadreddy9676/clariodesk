@@ -1,4 +1,5 @@
 import type {
+  CreateAiProviderConnectionInput,
   CreateCannedResponseInput,
   CreateClientInput,
   CreateInternalNoteInput,
@@ -12,6 +13,7 @@ import type {
   LoginInput,
   MapChannelInput,
   SendReplyInput,
+  UpdateAiProviderConnectionInput,
   UpdateCannedResponseInput,
   UpdateTicketInput,
 } from "@clariodesk/schemas";
@@ -141,6 +143,20 @@ export type ApiMe = {
   displayName: string;
   role: string;
   signature: string | null;
+};
+
+export type ApiAiConnection = {
+  id: string;
+  provider: "anthropic" | "openai" | "google" | "azure_openai" | "custom";
+  label: string;
+  baseUrl: string | null;
+  model: string | null;
+  status: "active" | "disabled";
+  lastHealthCheckAt: string | null;
+  lastHealthCheckOk: boolean | null;
+  lastHealthCheckError: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ApiOpsSummary = {
@@ -488,6 +504,41 @@ export class ClarioApiClient {
 
   createUser(input: CreateUserInput): Promise<{ userId: string }> {
     return this.request("/team/users", { method: "POST", body: input });
+  }
+
+  aiConnections(): Promise<ApiAiConnection[]> {
+    return this.request("/ai/connections");
+  }
+
+  createAiConnection(
+    input: CreateAiProviderConnectionInput,
+  ): Promise<ApiAiConnection> {
+    return this.request("/ai/connections", {
+      method: "POST",
+      body: input,
+      timeoutMs: 15_000,
+    });
+  }
+
+  updateAiConnection(
+    id: string,
+    input: UpdateAiProviderConnectionInput,
+  ): Promise<ApiAiConnection> {
+    return this.request(`/ai/connections/${id}`, {
+      method: "PATCH",
+      body: input,
+    });
+  }
+
+  deleteAiConnection(id: string): Promise<{ ok: true }> {
+    return this.request(`/ai/connections/${id}`, { method: "DELETE" });
+  }
+
+  testAiConnection(id: string): Promise<ApiAiConnection> {
+    return this.request(`/ai/connections/${id}/test`, {
+      method: "POST",
+      timeoutMs: 15_000,
+    });
   }
 
   pushVapidPublicKey(): Promise<{ publicKey: string | null }> {

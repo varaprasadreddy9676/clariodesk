@@ -397,6 +397,10 @@ function Workbench({
   const team = useAsyncData(() => api.teamMembers(), [api]);
   const cannedResponses = useAsyncData(() => api.cannedResponses(), [api]);
   const me = useAsyncData(() => api.me(), [api]);
+  const aiConnections = useAsyncData(
+    () => (session.role === "admin" ? api.aiConnections() : Promise.resolve([])),
+    [api, session.role],
+  );
 
   const mappedTickets = useMemo(
     () => (tickets.data ?? []).map((ticket) => toUiTicket(ticket, team.data ?? [])),
@@ -463,8 +467,10 @@ function Workbench({
       team.refresh(),
       cannedResponses.refresh(),
       me.refresh(),
+      aiConnections.refresh(),
     ]);
   }, [
+    aiConnections,
     cannedResponses,
     channelsRefreshRef,
     clients,
@@ -1061,6 +1067,8 @@ function Workbench({
             runAction={runAction}
             me={me.data}
             onMeChanged={() => me.refresh()}
+            aiConnections={aiConnections.data ?? []}
+            onAiConnectionsChanged={() => aiConnections.refresh()}
           />
         ) : null}
       </main>
