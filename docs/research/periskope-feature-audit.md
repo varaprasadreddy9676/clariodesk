@@ -347,6 +347,116 @@ valued, no change to priority.
 
 ---
 
+## 2B. Third pass — integrations, ticket automation, live interaction patterns
+
+Requested again explicitly ("still explore in-depth... bigger and better
+than Periskope"). This pass found the single biggest-leverage items in the
+whole audit, in Settings → Tickets specifically.
+
+### 2B.1 Settings → Tickets — the biggest find in this audit
+All three toggles below are **enabled and in daily use** in the real
+workspace:
+
+- **Ticket prefix** — a configurable 3-letter prefix (`MW`), producing the
+  human-readable `MWS-020` IDs seen throughout. ClarioDesk tickets have no
+  display ID at all beyond a raw UUID. Trivial to add (a per-workspace
+  prefix + a sequence), disproportionately improves how a ticket reads in
+  conversation ("MW-1234" vs a UUID).
+- **"Enable Automatic Ticket Attachment to Messages"** — when someone
+  replies to a message that's already linked to a ticket, the reply is
+  **automatically** attached to that same ticket. This directly and more
+  elegantly solves the "attach to an existing ticket" gap flagged in the
+  first pass (previously recommended as a manual ticket-picker menu item)
+  — reply-thread detection does it for free, no extra click for the agent.
+  **This should replace, not just supplement, recommendation #4 below.**
+- **"Enable emoji-based ticketing"** — reacting to any message with a
+  specific emoji (🏷️) instantly creates a ticket from it. ClarioDesk
+  already has message reactions wired end-to-end (shipped earlier this
+  session, verified live against the real WhatsApp account). Watching for
+  one specific emoji reaction and creating a ticket from it is close to
+  free to add on top of infrastructure that already exists — no new
+  subsystem, just one more branch in the existing reaction handler.
+- **"Send an automated message when a ticket is created"** — a templated
+  confirmation (`Automated ticket raised by medicsSupport: {{ticket_id}}`)
+  posted back into the chat automatically. Cheap, and closes the loop for
+  the customer without an agent having to type it.
+
+Together these four turn ticket creation from "an agent remembers to
+right-click and fill a form" into "mostly automatic," which is a
+materially different, better experience than what either ClarioDesk or a
+naive Periskope-clone would have without them.
+
+### 2B.2 Live interaction signals seen mid-conversation
+Two things observed in a real, currently-heated support thread (a hospital
+messaging "There's no response from your team" / "Creating bad situation
+over here"):
+
+- **Negative-sentiment messages get a distinct red-tinted bubble +
+  red-flag icon**, automatically — this is the visible output of the
+  "AI check for customer sentiments" automation rule seen earlier (§1.12).
+  AI-dependent, so it correctly stays bundled with the already-deferred AI
+  work — but the *visual treatment* (a distinct tint + icon for a
+  flagged/urgent message, independent of how it got flagged) is worth
+  building now as a generic "flagged message" style, ready for manual
+  flagging today and AI-driven flagging later.
+- **A live "`<Team>` is typing…" / "`<Team>` is active" indicator** shown
+  directly above the composer, tied to presence in that specific chat —
+  useful collision-avoidance so two agents don't both start answering the
+  same urgent customer at once. ClarioDesk already has the Socket.io
+  presence/realtime plumbing this would sit on top of; this is a small,
+  additive UI feature on infrastructure that already exists, not a new
+  subsystem.
+
+Also seen: a **"Mark as Internal"** message-context-menu action, distinct
+from Private Note — reclassifies visibility of an existing message rather
+than composing a new internal one. Lower priority; Private Note already
+covers the core need.
+
+### 2B.3 Media, Scheduling, Integrations — mixed signal
+- **Media Library** (top-level, not just per-chat): a gallery across all
+  chats or filtered to one, with file-count/storage-size totals, filter,
+  search, export. This directly matches PROGRESS.md's own already-known,
+  already-planned gap ("Production timeline: ...media gallery..." listed
+  as not-yet-done under Immediate pilot blockers) — this pass just
+  confirms it with a concrete reference shape, doesn't newly discover it.
+- **Scheduled Messages, including recurring sends** (a "Repeat" column in
+  the scheduler) — this is almost certainly the real mechanism behind the
+  "Hi Team, kindly find today's open ticket status update" message landing
+  in 7+ hospital groups within 13 minutes flagged in the first read-only
+  pass: a **recurring scheduled single-chat send**, not a bulk broadcast
+  and not manual copy-paste. This is meaningfully lower-risk than the bulk
+  broadcast feature already flagged (P3, do-not-build-yet) since it's one
+  chat per scheduled item, not one blast to many recipients — it can
+  extend ClarioDesk's existing outbox send-delay/cancel infrastructure
+  rather than needing a new rate-limited multi-recipient sender. Worth
+  separating from "bulk broadcast" in the roadmap: **recurring single-chat
+  scheduled sends are a near-term-safe feature; multi-chat broadcast is
+  not.**
+- **Integrations (API keys, Webhooks, MCP, Zapier, HubSpot, Freshdesk,
+  ZohoDesk, Zoho CRM, Google Sheets/Calendar)** — a full page each,
+  **every single one unconfigured / zero keys generated** in this real,
+  actively-used production workspace. Third piece of negative evidence in
+  this audit (joining Custom Properties and Quick-Reply access-scoping
+  from earlier passes): built, available, unused. **Do not prioritize
+  building a matching suite of native CRM connectors.** Two exceptions
+  worth calling out on strategic grounds rather than usage evidence:
+  - **Outbound webhooks** (events → a signed HTTP callback) are generic
+    infrastructure, not a specific CRM integration — and this exact
+    customer *runs their own HIMS product*, so being able to pipe
+    ClarioDesk ticket/message events into their own system is plausibly
+    valuable even though this account hasn't set it up. Lower-cost than a
+    bespoke connector: one webhook dispatcher + HMAC signing, reusing
+    patterns ClarioDesk's inbound gateway-webhook code already has.
+  - **An MCP server** is paywalled Pro/Enterprise-only in Periskope. Since
+    ClarioDesk is explicitly building the open-source, give-it-to-the-
+    community alternative, offering this for free is a genuine, on-brand
+    differentiator (letting Claude or any MCP-aware agent read/act on a
+    team's WhatsApp support inbox) — but it's a real build (a set of MCP
+    tools wrapping the existing API), not a quick add. Worth roadmapping,
+    not doing immediately.
+
+---
+
 ## 3. Prioritized recommendation for ClarioDesk
 
 Ranked by evidence-of-real-use ÷ implementation risk, using the same
@@ -354,33 +464,42 @@ P0–P4 scheme as `docs/PROGRESS.md`:
 
 | # | Feature | Evidence it's real | Risk | Suggested priority |
 |---|---------|--------------------|------|---------------------|
-| 1 | **Chat/channel labels** (name+color, workspace-managed, shown as pills in `ChannelList` rows, filterable) | Visible on literally every row of the real inbox | Low — additive schema (`labels` + `channel_labels`), no send/WhatsApp risk | **Do next** |
-| 2 | **Audit log viewer** (admin screen reading the existing `audit_logs` table) | Every serious tool in this audit has one; ClarioDesk already writes the data | Very low — pure read, zero business-logic risk | **Do next / can run alongside #1** |
-| 3 | **Chat-level assignment** (assign a channel to a teammate, shown as an avatar in the list — not just ticket-level assignment) | Assignee avatar on every single inbox row | Low-medium — reuses existing `channelAssignments` table, needs list UI + filter | High |
-| 4 | Message flag/pin + "attach to an existing ticket" (vs. always creating new) | Explicit context-menu items in daily use | Low-medium — schema flag on messages + a ticket-picker instead of only "create" | Medium-high |
-| 5 | Time-series + per-agent analytics (tickets closed, first-response time, active chats) | Whole dedicated Analytics section, actively referenced | Medium — needs aggregation queries/materialized views, more surface area | Medium (matches PROGRESS.md P2 "basic analytics", now confirmed valuable) |
-| 6 | Tabular/bulk "Chat List" admin view (spreadsheet of all channels with bulk label/assign) | A whole separate nav item from the normal inbox | Medium — new view, but built on data ClarioDesk already has | Medium |
-| 7 | Auto-generated ticket-status PDF/report | Explains the exact broadcast message pattern found in real usage | Medium — needs a PDF-generation step in the worker/API | Lower — nice-to-have, not blocking |
-| 8 | **Privacy: mask customer phone numbers + confirm/expire media-link access** | Dedicated Config toggles in the real tool; this account's chats are hospitals discussing patients | Low — boolean setting + confirming existing signed-URL expiry, no new subsystem | High — healthcare-adjacent data, worth doing alongside #1–3, not after |
-| 9 | Workspace-level "always sign outbound replies" admin toggle, layered on the per-message toggle already shipped | Confirmed as an org-wide default in the real tool, not per-message | Very low — one boolean read in the composer | Low-medium — cheap, do whenever back in that code |
-| 10 | Quick-reply refinements: slash-command auto-trigger, per-reply access scoping | Both present but incremental over what already shipped | Low | Low — cheap follow-on whenever touching Quick Replies again |
-| 11 | Group-creation templates (saved default participant sets) | One real template in active use | Low-medium — extends existing `NewGroupDialog` | Low — nice-to-have |
-| — | ~~Custom Properties (arbitrary custom fields per chat/ticket)~~ | **Zero properties configured even in this real, active workspace** | — | **Do not build** — real feature, unused even by its own users; wasted effort right now |
-| 12 | Bulk broadcast messaging | Actively used in production (daily status update to 7+ groups) | **High** — WhatsApp ban/spam risk without rate-limiting+jitter, already correctly flagged P3 in PROGRESS.md | Do not build yet |
-| 13 | Automation rule builder | 2 live rules in production | **High** — a genuine rule engine, largest scope item here | Do not build yet (P2/P3, correctly deferred) |
-| 14 | Granular per-action/per-screen RBAC + shift-scoped roster (phones/labels/schedule per member) | Full settings pages dedicated to both | **High** — replaces the entire fixed-role model | Do not build yet (P4, correctly deferred) |
-| 15 | AI agent / auto-flagging | Paywalled even in the reference product | High, and explicitly out of scope | Do not build yet (P3, correctly deferred) |
+| 1 | **Ticket prefix + auto-attach-by-reply-thread + emoji-reaction ticketing + auto-confirmation message** (§2B.1, four small pieces, one theme: make ticket creation mostly automatic) | All four enabled and in daily use in the real workspace | Low — prefix is a counter, auto-attach is a reply-thread lookup, emoji-ticketing reuses reactions ClarioDesk already ships, confirmation reuses the outbox | **Do next — highest leverage-to-effort ratio in this whole audit** |
+| 2 | **Chat/channel labels** (name+color, workspace-managed, shown as pills in `ChannelList` rows, filterable) | Visible on literally every row of the real inbox | Low — additive schema (`labels` + `channel_labels`), no send/WhatsApp risk | **Do next** |
+| 3 | **Audit log viewer** (admin screen reading the existing `audit_logs` table) | Every serious tool in this audit has one; ClarioDesk already writes the data | Very low — pure read, zero business-logic risk | **Do next / can run alongside #1–2** |
+| 4 | **Chat-level assignment** (assign a channel to a teammate, shown as an avatar in the list — not just ticket-level assignment) | Assignee avatar on every single inbox row; has its own dedicated notification type | Low-medium — reuses existing `channelAssignments` table, needs list UI + filter | High |
+| 5 | **Privacy: mask customer phone numbers + confirm/expire media-link access** | Dedicated Config toggles in the real tool; this account's chats are hospitals discussing patients | Low — boolean setting + confirming existing signed-URL expiry, no new subsystem | High — healthcare-adjacent data, worth doing alongside #1–4, not after |
+| 6 | **Recurring, single-chat scheduled sends** (extends the existing outbox send-delay/cancel infra with a future time + optional repeat) | Best explanation for the real daily 7-group status-update pattern found in the original read-only review | Low-medium — one chat per scheduled item, no multi-recipient fan-out, so materially safer than bulk broadcast | Medium-high — meaningfully lower risk than broadcast (#13), worth separating out and doing sooner |
+| 7 | Generic "flagged message" visual treatment (distinct tint/icon), usable manually today and by AI-driven flagging later | Real in the product (§2B.2), currently AI-driven there | Low for the manual version — a boolean + a style, no AI dependency required to ship it now | Medium |
+| 8 | Live "`<agent>` is viewing / typing" presence-in-chat indicator | Real, sits directly above the composer in production | Low-medium — ClarioDesk's Socket.io presence plumbing already exists, this is additive UI | Medium |
+| 9 | Time-series + per-agent analytics (tickets closed, first-response time, active chats) | Whole dedicated Analytics section, actively referenced | Medium — needs aggregation queries/materialized views, more surface area | Medium (matches PROGRESS.md P2 "basic analytics", now confirmed valuable) |
+| 10 | Tabular/bulk "Chat List" admin view (spreadsheet of all channels with bulk label/assign) | A whole separate nav item from the normal inbox | Medium — new view, but built on data ClarioDesk already has | Medium |
+| 11 | Workspace-level media gallery (cross-chat, filterable, with export) | Confirms PROGRESS.md's own already-known, already-planned gap | Medium | Already tracked — no new priority needed, this pass just confirms it |
+| 12 | Auto-generated ticket-status PDF/report | Explains the exact broadcast message pattern found in real usage | Medium — needs a PDF-generation step in the worker/API | Lower — nice-to-have, not blocking |
+| 13 | Workspace-level "always sign outbound replies" admin toggle, layered on the per-message toggle already shipped | Confirmed as an org-wide default in the real tool, not per-message | Very low — one boolean read in the composer | Low-medium — cheap, do whenever back in that code |
+| 14 | Quick-reply refinements: slash-command auto-trigger, per-reply access scoping | Both present but incremental over what already shipped | Low | Low — cheap follow-on whenever touching Quick Replies again |
+| 15 | Group-creation templates (saved default participant sets) | One real template in active use | Low-medium — extends existing `NewGroupDialog` | Low — nice-to-have |
+| 16 | Outbound webhooks (events → signed HTTP callback to a third-party system) | Generic infra, not usage-evidenced here, but this exact customer runs their own HIMS product that could consume it | Low-medium — one dispatcher + HMAC signing, mirrors patterns the inbound gateway-webhook code already has | Speculative-but-cheap — worth roadmapping given who the user is, not usage-driven |
+| 17 | Open-source-only differentiator: a free MCP server wrapping the API | Paywalled Pro/Enterprise-only in Periskope; genuinely on-brand for an open-source Anthropic-ecosystem alternative | Medium — a real build (MCP tool surface over the existing API), not a quick add | Roadmap, not immediate |
+| — | ~~Custom Properties~~ / ~~native CRM connectors (HubSpot, Freshdesk, ZohoDesk, Zoho CRM, Zapier, Google Sheets/Calendar)~~ | **Zero configured/connected even in this real, actively-used workspace** — three separate passes, same negative signal | — | **Do not build** — real features, unused even by their own users; wasted effort right now |
+| 18 | Bulk broadcast messaging (multi-chat) | Actively used in production (daily status update to 7+ groups) | **High** — WhatsApp ban/spam risk without rate-limiting+jitter, already correctly flagged P3 in PROGRESS.md | Do not build yet — and now that #6 (recurring single-chat sends) is separated out, there's less pressure to build this at all |
+| 19 | Automation rule builder | 2 live rules in production | **High** — a genuine rule engine, largest scope item here | Do not build yet (P2/P3, correctly deferred) |
+| 20 | Granular per-action/per-screen RBAC + shift-scoped roster (phones/labels/schedule per member) | Full settings pages dedicated to both | **High** — replaces the entire fixed-role model | Do not build yet (P4, correctly deferred) |
+| 21 | AI agent / sentiment auto-flagging | Paywalled even in the reference product | High, and explicitly out of scope | Do not build yet (P3, correctly deferred) |
 
-**Bottom line:** items 1–2 are safe to build immediately (no send-risk,
-small schema surface, directly evidenced). Item 3 is the natural next step
-after labels since it reuses `channelAssignments` that already exists, and
-the real tool treats chat-assignment as important enough to have its own
-notification type. Item 8 (privacy toggles) punches above its "just a
-setting" weight given this specific account handles patient-adjacent
-hospital conversations — worth bundling in alongside #1–3 rather than
-waiting. Custom Properties is the one feature in this whole audit with
-**negative** evidence — real, but unused even by the team that has it —
-and should stay unbuilt. Items 12–15 remain the biggest, riskiest, or most
-infrastructure-heavy asks seen in the real tool, and PROGRESS.md was
-already correct to defer every one of them — this deeper pass found no
-reason to move any of them up either.
+**Bottom line:** the single best find across all three passes is #1 — four
+small, cheap pieces of *ticket automation* (prefix, auto-thread-attach,
+emoji-reaction ticketing, auto-confirmation) that together change ticket
+creation from "an agent remembers to do it" to "mostly automatic," each
+buildable on infrastructure ClarioDesk already has (reactions, outbox,
+counters). Labels (#2) and the audit-log viewer (#3) remain the next
+safest, most directly evidenced builds. #6 (recurring single-chat
+scheduled sends) is a materially safer, separable slice of what looked
+like "bulk broadcast" in the first pass — it deserves its own, sooner
+slot rather than being lumped in with the genuinely risky multi-chat
+broadcast feature (#18), which — along with the automation rule engine,
+granular RBAC, and AI — remains correctly deferred per PROGRESS.md across
+all three passes. Three independent passes turned up the same negative
+signal for Custom Properties and every native CRM connector: built,
+available, and unused even by the real team that has them — confidently
+do not prioritize either.
