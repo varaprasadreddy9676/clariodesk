@@ -81,6 +81,9 @@ function fakeAdapter(
     channelType: chat.channelType ?? "group",
     participantCount: chat.participantCount,
     providerChatId: chat.providerChatId,
+    isPinned: chat.isPinned,
+    isMuted: chat.isMuted,
+    isArchived: chat.isArchived,
   }));
   return {
     getAdapterType: () => "clario_gateway",
@@ -428,6 +431,70 @@ describe("PhonesService.syncGroups (integration)", () => {
       .where(eq(schema.channelMappings.channelId, channel!.id));
     expect(mappings).toHaveLength(1);
     expect(mappings[0]?.status).toBe("active");
+  });
+
+  it("reconciles pin/mute/archive from the phone for an already-synced chat", async () => {
+    const { workspaceId, phoneId } = await seedPhone();
+    const [channel] = await db
+      .insert(schema.channels)
+      .values({
+        workspaceId,
+        phoneInstanceId: phoneId,
+        providerChatId: "120363000000@g.us",
+        channelType: "group",
+        title: "Support Group",
+        subject: "Support Group",
+        status: "active",
+        isPinned: false,
+        isMuted: false,
+      })
+      .returning({ id: schema.channels.id });
+
+    // The user archived and muted this chat directly on their phone --
+    // nothing done through ClarioDesk.
+    const adapter = fakeAdapter([
+      {
+        providerChatId: "120363000000@g.us",
+        title: "Support Group",
+        isArchived: true,
+        isMuted: true,
+      },
+    ]);
+    const { service } = makeService(adapter);
+
+    await service.syncGroups(user(workspaceId), phoneId);
+
+    const [synced] = await db
+      .select({
+        status: schema.channels.status,
+        isMuted: schema.channels.isMuted,
+        isPinned: schema.channels.isPinned,
+      })
+      .from(schema.channels)
+      .where(eq(schema.channels.id, channel!.id));
+    expect(synced).toMatchObject({
+      status: "archived",
+      isMuted: true,
+      isPinned: false,
+    });
+
+    // Un-archiving on the phone restores a group to "unmapped" (its default
+    // pre-mapping state), not silently to "active".
+    const unarchivedAdapter = fakeAdapter([
+      {
+        providerChatId: "120363000000@g.us",
+        title: "Support Group",
+        isArchived: false,
+      },
+    ]);
+    const { service: unarchiveService } = makeService(unarchivedAdapter);
+    await unarchiveService.syncGroups(user(workspaceId), phoneId);
+
+    const [unarchived] = await db
+      .select({ status: schema.channels.status })
+      .from(schema.channels)
+      .where(eq(schema.channels.id, channel!.id));
+    expect(unarchived?.status).toBe("unmapped");
   });
 
   it("requires an admin user", async () => {
