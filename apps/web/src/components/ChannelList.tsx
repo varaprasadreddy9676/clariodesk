@@ -49,7 +49,7 @@ export function ChannelList({
   const rowVirtualizer = useVirtualizer({
     count: channels.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 56,
+    estimateSize: () => 52,
     overscan: 8,
   });
   // On mobile, this panel is toggled via CSS display:none (swapping to the
