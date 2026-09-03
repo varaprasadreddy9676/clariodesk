@@ -2470,10 +2470,12 @@ function toUiChannels(
       channel.lastMessageAt ?? channel.awaitingResponseSince ?? null,
     lastMessage: channel.awaitingResponseSince
       ? "Waiting for support response"
-      : (channel.lastMessage ??
+      : (channel.lastMessage
+          ? collapsePreview(channel.lastMessage)
+          : null) ||
         (channel.lastMessageType
-          ? `[${channel.lastMessageType.replaceAll("_", " ")}]`
-          : "No messages yet")),
+          ? messageTypePreview(channel.lastMessageType)
+          : "No messages yet"),
     lastTime: channel.lastMessageAt
       ? formatTime(channel.lastMessageAt)
       : "No messages",
@@ -2540,6 +2542,34 @@ function memberName(members: ApiTeamMember[], id: string | null): string {
     members.find((member) => member.userId === id)?.displayName ??
     id.slice(0, 8)
   );
+}
+
+// Chat-list preview for a message with no text body (media, or a type the
+// gateway couldn't fully classify) — never surface a raw internal type
+// token like "[unknown]" or "[sticker]" to the user.
+const MESSAGE_TYPE_PREVIEW: Record<string, string> = {
+  image: "📷 Photo",
+  video: "🎥 Video",
+  audio: "🎵 Voice message",
+  document: "📄 Document",
+  sticker: "Sticker",
+  location: "📍 Location",
+  vcard: "👤 Contact",
+};
+
+function messageTypePreview(type: string): string {
+  return MESSAGE_TYPE_PREVIEW[type] ?? "Message";
+}
+
+// Chat-list previews render on a single truncated line — collapse embedded
+// newlines/whitespace and strip WhatsApp's *bold*/_italic_/~strike~
+// markdown so the raw formatting characters don't show up as literal
+// asterisks/underscores in a one-line preview.
+function collapsePreview(text: string): string {
+  return text
+    .replaceAll(/[*_~]/g, "")
+    .replaceAll(/\s+/g, " ")
+    .trim();
 }
 
 function formatTime(value: string): string {

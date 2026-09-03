@@ -850,9 +850,9 @@ button:disabled {
 
 .channel-row-select {
   display: grid;
-  grid-template-columns: 49px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr);
   align-items: center;
-  gap: 13px;
+  gap: 12px;
   width: 100%;
   padding: 8px 40px 8px 13px;
   border: 0;
@@ -909,11 +909,12 @@ button:disabled {
   100% { background-position: -200% 0; }
 }
 
-/* WhatsApp-style divider that starts after the avatar */
+/* Divider starting after the avatar column (13px padding + 40px avatar +
+   12px gap) */
 .channel-row::after {
   content: "";
   position: absolute;
-  left: 75px;
+  left: 65px;
   right: 0;
   bottom: 0;
   height: 1px;
@@ -924,18 +925,30 @@ button:disabled {
   background: var(--hover);
 }
 
+/* Elegant selected state: a soft brand tint + a 3px accent bar, rather
+   than a flat grey block that reads no differently from a hover state. */
 .channel-row.is-active {
-  background: var(--active);
+  background: var(--brand-soft);
+}
+
+.channel-row.is-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--brand);
 }
 
 .channel-avatar {
   display: inline-grid;
   place-items: center;
-  width: 49px;
-  height: 49px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   color: #fff;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.2px;
   user-select: none;
@@ -1072,7 +1085,7 @@ button:disabled {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   border-right: 0;
-  background: var(--chat-bg);
+  background: var(--canvas);
 }
 
 .timeline-header {
@@ -1137,10 +1150,17 @@ button:disabled {
 .message-scroll {
   overflow: auto;
   min-height: 0;
-  padding: 12px 6% 18px;
+  padding: 16px 0 18px;
   overscroll-behavior: contain;
-  background-image: var(--chat-doodle);
-  background-repeat: repeat;
+}
+
+/* Centered conversation stream (design review: "very wide canvas but
+   bubbles stick to far edges" — full-width WhatsApp-style layout reads
+   fine on a phone screen, not on a wide desktop panel). */
+.message-scroll-inner {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 24px;
 }
 
 .conversation-empty {
@@ -1194,14 +1214,17 @@ button:disabled {
   box-shadow: var(--bubble-shadow);
 }
 
+/* Modern (non-WhatsApp) bubble treatment: uniform rounded corners per the
+   design system's 16px bubble radius (§22), no tail — a tail reads as a
+   WhatsApp clone rather than ClarioDesk's own surface. */
 .message-bubble {
   position: relative;
   width: fit-content;
-  max-width: min(65%, 580px);
-  margin: 3px 0;
-  padding: 6px 9px 8px;
+  max-width: min(68%, 620px);
+  margin: 2px 0;
+  padding: 9px 12px 10px;
   border: 0;
-  border-radius: 7.5px;
+  border-radius: var(--radius-lg);
   background: var(--inbound);
   box-shadow: var(--bubble-shadow);
 }
@@ -1214,54 +1237,17 @@ button:disabled {
 
 .message-inbound {
   background: var(--inbound);
-  border-top-left-radius: 0;
-}
-
-/* Inbound tail (top-left) */
-.message-inbound::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -8px;
-  width: 0;
-  height: 0;
-  border-right: 8px solid var(--inbound);
-  border-bottom: 9px solid transparent;
 }
 
 .message-outbound {
   margin-left: auto;
   background: var(--outbound);
-  border-top-right-radius: 0;
-}
-
-/* Outbound tail (top-right) */
-.message-outbound::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: -8px;
-  width: 0;
-  height: 0;
-  border-left: 8px solid var(--outbound);
-  border-bottom: 9px solid transparent;
 }
 
 .message-note {
   margin-left: auto;
   background: var(--note);
-  border-top-right-radius: 0;
-}
-
-.message-note::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: -8px;
-  width: 0;
-  height: 0;
-  border-left: 8px solid var(--note);
-  border-bottom: 9px solid transparent;
+  border: 1px solid var(--note-border);
 }
 
 .message-deleted {
@@ -1290,6 +1276,33 @@ button:disabled {
 
 .message-emoji-only .message-foot {
   margin-top: 0;
+}
+
+/* A sticker inside its own bordered/backgrounded media card, inside a
+   second bordered/backgrounded bubble, reads as a "dashboard card" rather
+   than a message — drop the bubble's own chrome so the sticker sits
+   directly on the canvas, WhatsApp/iMessage-style. */
+.message-bubble.message-sticker-only {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.message-sticker-only .message-media-stack {
+  margin: 0;
+}
+
+.message-sticker-only .message-media-preview {
+  width: 140px;
+  height: 140px;
+  border: 0;
+  background: transparent;
+  object-fit: contain;
+}
+
+.message-sticker-only .message-foot {
+  margin-top: 2px;
+  padding: 0 2px;
 }
 
 /* Sender name (groups) — colored like WhatsApp */
@@ -1695,22 +1708,31 @@ button:disabled {
 .composer {
   position: relative;
   z-index: 5;
+  padding: 12px 16px 16px;
   border-top: 1px solid var(--border);
+  background: var(--canvas);
+}
+
+/* Compact segmented control (WhatsApp · Private Note) sitting just above
+   the floating input card — not a joined browser-tab strip. Switching to
+   Private Note is safety-critical (agents must never mistake it for a
+   reply that will reach the customer), so the active segment recolors to
+   the same warning tone the card itself tints to below. */
+.composer-tabs {
+  display: inline-flex;
+  gap: 2px;
+  width: fit-content;
+  margin-bottom: 8px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
   background: var(--surface-muted);
 }
 
-.composer-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 6px 12px 0;
-}
-
 .composer-tabs button {
-  min-height: 30px;
-  padding: 5px 11px;
-  border: 1px solid transparent;
-  border-bottom: 2px solid transparent;
-  border-radius: 5px 5px 0 0;
+  min-height: 26px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-secondary);
   font-size: 12.5px;
@@ -1718,45 +1740,56 @@ button:disabled {
 }
 
 .composer-tabs button.is-active {
-  border-color: var(--border);
-  border-bottom-color: var(--surface);
   background: var(--surface);
   color: var(--brand-hover);
+  box-shadow: var(--shadow-card);
 }
 
 .composer-note .composer-tabs button.is-active {
   color: var(--warning);
 }
 
+/* The unified floating composer card. Private Note mode tints the whole
+   card (not just an icon) — the one visual cue an agent should never be
+   able to miss before typing something meant to stay internal. */
 .composer-surface {
   display: grid;
-  gap: 4px;
-  margin-top: -1px;
-  padding: 8px 12px 7px;
-  border-top: 1px solid var(--border);
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-card);
+  transition:
+    background 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.composer-note .composer-surface {
+  border-color: var(--note-border);
+  background: var(--note);
 }
 
 .composer-input-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 36px;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
 }
 
 .composer textarea {
   width: 100%;
-  min-height: 34px;
+  min-height: 22px;
   max-height: 120px;
-  padding: 7px 2px;
+  padding: 4px 2px;
   border: 0;
   border-radius: 0;
   outline: none;
-  background: var(--surface);
+  background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 14.5px;
+  line-height: 22px;
   resize: none;
   overflow-y: auto;
 }
@@ -1769,20 +1802,18 @@ button:disabled {
   box-shadow: none;
 }
 
-.composer-note textarea {
-  background: transparent;
-}
-
 .composer-send {
   display: grid;
+  flex-shrink: 0;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: 0;
   border-radius: 50%;
   background: var(--brand);
   color: #fff;
+  transition: background 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .composer-send:disabled {
@@ -1799,7 +1830,13 @@ button:disabled {
   align-items: center;
   gap: 4px;
   min-height: 28px;
+  padding-top: 2px;
+  border-top: 1px solid var(--border);
   color: var(--text-secondary);
+}
+
+.composer-note .composer-toolbar {
+  border-top-color: var(--note-border);
 }
 
 .composer-toolbar > button,
