@@ -84,11 +84,7 @@ export class CannedResponsesService {
     return created;
   }
 
-  async update(
-    user: AuthUser,
-    id: string,
-    input: UpdateCannedResponseInput,
-  ) {
+  async update(user: AuthUser, id: string, input: UpdateCannedResponseInput) {
     this.assertCanManage(user);
     if (input.title) {
       const existing = await this.db
