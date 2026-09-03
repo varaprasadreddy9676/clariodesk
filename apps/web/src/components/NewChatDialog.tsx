@@ -1,6 +1,6 @@
 import { Paperclip, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { ApiPhone } from "../api.js";
+import type { ApiContactSummary, ApiPhone } from "../api.js";
 import { AttachmentTray } from "./AttachmentTray.js";
 import { normalizePhoneInput } from "./new-conversation-utils.js";
 import { validateComposerAttachment } from "./composer-utils.js";
@@ -16,10 +16,12 @@ export function NewChatDialog({
   phones,
   onClose,
   onCreate,
+  onSearchContacts,
 }: {
   phones: ApiPhone[];
   onClose: () => void;
   onCreate: (input: NewChatInput) => Promise<void>;
+  onSearchContacts: (query: string) => Promise<ApiContactSummary[]>;
 }) {
   const [phoneInstanceId, setPhoneInstanceId] = useState(phones[0]?.id ?? "");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -27,6 +29,10 @@ export function NewChatDialog({
   const [attachment, setAttachment] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [contactQuery, setContactQuery] = useState("");
+  const [contactResults, setContactResults] = useState<ApiContactSummary[]>([]);
+  const [selectedContact, setSelectedContact] =
+    useState<ApiContactSummary | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -37,6 +43,34 @@ export function NewChatDialog({
     document.addEventListener("keydown", escape);
     return () => document.removeEventListener("keydown", escape);
   }, [onClose, submitting]);
+
+  useEffect(() => {
+    const trimmed = contactQuery.trim();
+    if (!trimmed) {
+      setContactResults([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const results = await onSearchContacts(trimmed);
+        if (!cancelled) setContactResults(results);
+      } catch {
+        if (!cancelled) setContactResults([]);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [contactQuery, onSearchContacts]);
+
+  function pickContact(contact: ApiContactSummary) {
+    setSelectedContact(contact);
+    setPhoneNumber(contact.primaryPhone);
+    setContactQuery("");
+    setContactResults([]);
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -104,16 +138,57 @@ export function NewChatDialog({
           </label>
         ) : null}
         <label>
-          WhatsApp number
+          Find a contact
           <input
             ref={firstInputRef}
-            value={phoneNumber}
-            onChange={(event) => setPhoneNumber(event.target.value)}
-            placeholder="+919876543210"
-            inputMode="tel"
-            required
+            value={contactQuery}
+            onChange={(event) => setContactQuery(event.target.value)}
+            placeholder="Search by name or number"
           />
         </label>
+        {contactResults.length > 0 ? (
+          <ul className="contact-picker-results" role="listbox">
+            {contactResults.map((contact) => (
+              <li key={contact.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={selectedContact?.id === contact.id}
+                  onClick={() => pickContact(contact)}
+                >
+                  <strong>{contact.canonicalName}</strong>
+                  <span>{contact.primaryPhone}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {selectedContact ? (
+          <div className="contact-picker-selected">
+            Starting chat with <strong>{selectedContact.canonicalName}</strong>{" "}
+            ({selectedContact.primaryPhone})
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedContact(null);
+                setPhoneNumber("");
+              }}
+            >
+              Change
+            </button>
+          </div>
+        ) : (
+          <label>
+            WhatsApp number
+            <input
+              value={phoneNumber}
+              onChange={(event) => setPhoneNumber(event.target.value)}
+              placeholder="+919876543210"
+              inputMode="tel"
+              required
+            />
+          </label>
+        )}
         <label>
           First message
           <textarea

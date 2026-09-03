@@ -718,6 +718,71 @@ button:disabled {
   cursor: pointer;
 }
 
+.contact-picker-results {
+  display: grid;
+  gap: 2px;
+  max-height: 168px;
+  overflow-y: auto;
+  margin: -6px 0 0;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  list-style: none;
+}
+
+.contact-picker-results button {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-body-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.contact-picker-results button:hover,
+.contact-picker-results button[aria-selected="true"] {
+  background: var(--hover);
+}
+
+.contact-picker-results button span {
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.contact-picker-selected {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-body-secondary);
+  font-weight: 400;
+}
+
+.contact-picker-selected button {
+  margin-left: auto;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  cursor: pointer;
+}
+
 @media (max-width: 520px) {
   .dialog-backdrop {
     align-items: end;

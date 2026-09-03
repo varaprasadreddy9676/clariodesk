@@ -1,10 +1,12 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import { schema, type Database } from "@clariodesk/db";
 import { TOKENS } from "../tokens.js";
 import type { AuthUser } from "../common/auth-context.js";
 import { AccessService } from "../common/access.service.js";
 import { assertAdmin } from "../common/roles.js";
+
+const NEW_CHAT_SEARCH_LIMIT = 20;
 
 @Injectable()
 export class ContactsService {
@@ -51,5 +53,52 @@ export class ContactsService {
           eq(schema.channelMemberships.channelId, channelId),
         ),
       );
+  }
+
+  /**
+   * Contacts a user can start a new chat with, scoped to the channels/clients
+   * they're allowed to see (same access model as search.service.ts). Unlike
+   * `list()`, this is not admin-only — any workspace member can search their
+   * own accessible contacts to start a conversation.
+   */
+  async searchForNewChat(user: AuthUser, query?: string) {
+    const allowed = await this.access.accessibleChannelIds(user);
+    if (allowed !== "all" && allowed.length === 0) return [];
+
+    const trimmed = query?.trim();
+    const conditions = [
+      eq(schema.channelMemberships.workspaceId, user.workspaceId),
+    ];
+    if (allowed !== "all") {
+      conditions.push(inArray(schema.channelMemberships.channelId, allowed));
+    }
+    if (trimmed) {
+      const pattern = `%${trimmed}%`;
+      const textMatch = or(
+        ilike(schema.contacts.canonicalName, pattern),
+        ilike(schema.contacts.primaryPhone, pattern),
+      );
+      if (textMatch) conditions.push(textMatch);
+    }
+
+    const rows = await this.db
+      .select({
+        id: schema.contacts.id,
+        primaryPhone: schema.contacts.primaryPhone,
+        canonicalName: schema.contacts.canonicalName,
+      })
+      .from(schema.channelMemberships)
+      .innerJoin(
+        schema.contacts,
+        eq(schema.contacts.id, schema.channelMemberships.contactId),
+      )
+      .where(and(...conditions))
+      .limit(NEW_CHAT_SEARCH_LIMIT * 4);
+
+    const byContact = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) {
+      if (!byContact.has(row.id)) byContact.set(row.id, row);
+    }
+    return [...byContact.values()].slice(0, NEW_CHAT_SEARCH_LIMIT);
   }
 }

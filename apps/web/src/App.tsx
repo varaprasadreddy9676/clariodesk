@@ -878,6 +878,9 @@ function Workbench({
                       phone.status === "connected" ||
                       phone.status === "syncing",
                   )}
+                  onSearchContacts={(query) =>
+                    api.searchContactsForNewChat(query)
+                  }
                   onCreateChat={async (input) => {
                     const created = await api.createDirectConversation({
                       phoneInstanceId: input.phoneInstanceId,
