@@ -145,6 +145,12 @@ export type ApiMe = {
   signature: string | null;
 };
 
+export type ApiContactSummary = {
+  id: string;
+  primaryPhone: string;
+  canonicalName: string;
+};
+
 export type ApiAiConnection = {
   id: string;
   provider: "anthropic" | "openai" | "google" | "azure_openai" | "custom";
@@ -483,6 +489,10 @@ export class ClarioApiClient {
 
   search(q: string): Promise<SearchResult> {
     return this.request(`/search?q=${encodeURIComponent(q)}`);
+  }
+
+  searchContactsForNewChat(query: string): Promise<ApiContactSummary[]> {
+    return this.request(`/contacts/search?q=${encodeURIComponent(query)}`);
   }
 
   teamMembers(): Promise<ApiTeamMember[]> {

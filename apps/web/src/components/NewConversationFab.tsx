@@ -1,6 +1,6 @@
 import { MessageCirclePlus, UserRound, UsersRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { ApiPhone } from "../api.js";
+import type { ApiContactSummary, ApiPhone } from "../api.js";
 import { NewChatDialog, type NewChatInput } from "./NewChatDialog.js";
 import { NewGroupDialog, type NewGroupInput } from "./NewGroupDialog.js";
 
@@ -8,10 +8,12 @@ export function NewConversationFab({
   phones,
   onCreateChat,
   onCreateGroup,
+  onSearchContacts,
 }: {
   phones: ApiPhone[];
   onCreateChat: (input: NewChatInput) => Promise<void>;
   onCreateGroup: (input: NewGroupInput) => Promise<void>;
+  onSearchContacts: (query: string) => Promise<ApiContactSummary[]>;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [dialog, setDialog] = useState<"chat" | "group" | null>(null);
@@ -87,6 +89,7 @@ export function NewConversationFab({
         <NewChatDialog
           phones={phones}
           onCreate={onCreateChat}
+          onSearchContacts={onSearchContacts}
           onClose={() => {
             setDialog(null);
             buttonRef.current?.focus();
