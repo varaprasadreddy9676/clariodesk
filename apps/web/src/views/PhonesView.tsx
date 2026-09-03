@@ -110,9 +110,6 @@ export function PhonesView({
     (phone) => !hiddenDevPhones.includes(phone),
   );
   const primaryPhone =
-    visiblePhones.find(
-      (phone) => phone.providerInstanceId === "clario-support",
-    ) ??
     visiblePhones.find((phone) => phone.status === "connected") ??
     visiblePhones[0] ??
     null;
@@ -190,23 +187,32 @@ export function PhonesView({
         (item) => item.adapterType === "clario_gateway",
       )) {
         if (phone.status === "qr_required" || phone.status === "syncing") {
-          void api.phoneStatus(phone.id).then(async (result) => {
-            await onChanged();
-            if (
-              result.status === "connected" &&
-              !autoSyncedPhones.current.has(phone.id)
-            ) {
-              autoSyncedPhones.current.add(phone.id);
-              setPhoneResult(
-                `Connected ${result.phoneNumber ?? phone.displayName}. Syncing chats...`,
-              );
-              await api.syncGroups(phone.id);
+          void api
+            .phoneStatus(phone.id)
+            .then(async (result) => {
               await onChanged();
-            }
-            if (result.status !== "connected") {
-              autoSyncedPhones.current.delete(phone.id);
-            }
-          });
+              if (
+                result.status === "connected" &&
+                !autoSyncedPhones.current.has(phone.id)
+              ) {
+                autoSyncedPhones.current.add(phone.id);
+                setPhoneResult(
+                  `Connected ${result.phoneNumber ?? phone.displayName}. Syncing chats...`,
+                );
+                await api.syncGroups(phone.id);
+                await onChanged();
+              }
+              if (result.status !== "connected") {
+                autoSyncedPhones.current.delete(phone.id);
+              }
+            })
+            .catch((err: unknown) => {
+              setPhoneResult(
+                err instanceof Error
+                  ? `Automatic sync failed: ${err.message}`
+                  : "Automatic sync failed. Try Sync now.",
+              );
+            });
         }
         if (
           phone.status === "connected" &&
@@ -214,11 +220,19 @@ export function PhonesView({
         ) {
           autoSyncedPhones.current.add(phone.id);
           void (async () => {
-            setPhoneResult(
-              `Connected ${phone.phoneNumber ?? phone.displayName}. Syncing chats...`,
-            );
-            await api.syncGroups(phone.id);
-            await onChanged();
+            try {
+              setPhoneResult(
+                `Connected ${phone.phoneNumber ?? phone.displayName}. Syncing chats...`,
+              );
+              await api.syncGroups(phone.id);
+              await onChanged();
+            } catch (err) {
+              setPhoneResult(
+                err instanceof Error
+                  ? `Automatic sync failed: ${err.message}`
+                  : "Automatic sync failed. Try Sync now.",
+              );
+            }
           })();
         }
       }
@@ -250,7 +264,10 @@ export function PhonesView({
         <article className="phone-hero">
           {justConnectedId === primaryPhone.id ? (
             <div className="phone-hero-confetti" aria-hidden="true">
-              <LottiePlayer animationData={confettiBurstAnimation} style={{ width: 220, height: 220 }} />
+              <LottiePlayer
+                animationData={confettiBurstAnimation}
+                style={{ width: 220, height: 220 }}
+              />
             </div>
           ) : null}
           <div className="phone-hero-main">
@@ -441,7 +458,11 @@ export function PhonesView({
               <img src={qrImage} alt="WhatsApp link QR code" />
             ) : (
               <div className="wa-qr-pending">
-                <LottiePlayer animationData={qrPulseAnimation} loop style={{ width: 64, height: 64 }} />
+                <LottiePlayer
+                  animationData={qrPulseAnimation}
+                  loop
+                  style={{ width: 64, height: 64 }}
+                />
                 <span>Generating…</span>
               </div>
             )}
