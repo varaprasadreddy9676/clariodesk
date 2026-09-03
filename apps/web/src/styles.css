@@ -1901,6 +1901,11 @@ button:disabled {
   background: var(--surface-muted);
 }
 
+.composer-toolbar > button.is-active {
+  background: var(--brand-soft);
+  color: var(--brand-hover);
+}
+
 .composer-route {
   min-width: 0;
   margin-right: auto;

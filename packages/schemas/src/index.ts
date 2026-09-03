@@ -210,6 +210,11 @@ export const pushUnsubscribeSchema = z.object({
 });
 export type PushUnsubscribeInput = z.infer<typeof pushUnsubscribeSchema>;
 
+export const updateMySignatureSchema = z.object({
+  signature: z.string().trim().max(60).nullable(),
+});
+export type UpdateMySignatureInput = z.infer<typeof updateMySignatureSchema>;
+
 export const createCannedResponseSchema = z.object({
   title: z.string().min(1).max(200),
   body: z.string().min(1).max(4096),

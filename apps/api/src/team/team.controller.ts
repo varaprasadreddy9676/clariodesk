@@ -1,11 +1,13 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Patch, Post, UseGuards } from "@nestjs/common";
 import {
   assignChannelSchema,
   assignClientSchema,
   createUserSchema,
+  updateMySignatureSchema,
   type AssignChannelInput,
   type AssignClientInput,
   type CreateUserInput,
+  type UpdateMySignatureInput,
 } from "@clariodesk/schemas";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard.js";
 import { CurrentUser } from "../common/current-user.decorator.js";
@@ -21,6 +23,20 @@ export class TeamController {
   @Get("members")
   members(@CurrentUser() user: AuthUser) {
     return this.team.listMembers(user);
+  }
+
+  @Get("me")
+  me(@CurrentUser() user: AuthUser) {
+    return this.team.getMe(user);
+  }
+
+  @Patch("me/signature")
+  updateMySignature(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(updateMySignatureSchema))
+    body: UpdateMySignatureInput,
+  ) {
+    return this.team.updateMySignature(user, body);
   }
 
   @Post("users")

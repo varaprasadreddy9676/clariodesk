@@ -10,6 +10,7 @@ import type {
   AssignChannelInput,
   AssignClientInput,
   CreateUserInput,
+  UpdateMySignatureInput,
 } from "@clariodesk/schemas";
 import { TOKENS } from "../tokens.js";
 import type { AuthUser } from "../common/auth-context.js";
@@ -81,6 +82,48 @@ export class TeamService {
       metadata: { role: input.role },
     });
     return { userId: created.id };
+  }
+
+  /** The caller's own membership row — used for self-service settings like the reply signature. */
+  async getMe(user: AuthUser) {
+    const [row] = await this.db
+      .select({
+        userId: schema.users.id,
+        email: schema.users.email,
+        displayName: schema.users.displayName,
+        role: schema.workspaceUsers.role,
+        signature: schema.workspaceUsers.signature,
+      })
+      .from(schema.workspaceUsers)
+      .innerJoin(
+        schema.users,
+        eq(schema.users.id, schema.workspaceUsers.userId),
+      )
+      .where(
+        and(
+          eq(schema.workspaceUsers.workspaceId, user.workspaceId),
+          eq(schema.workspaceUsers.userId, user.userId),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new NotFoundException("Membership not found");
+    return row;
+  }
+
+  /** Update the caller's own reply signature (no admin gate — it's a personal preference). */
+  async updateMySignature(user: AuthUser, input: UpdateMySignatureInput) {
+    const [updated] = await this.db
+      .update(schema.workspaceUsers)
+      .set({ signature: input.signature || null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.workspaceUsers.workspaceId, user.workspaceId),
+          eq(schema.workspaceUsers.userId, user.userId),
+        ),
+      )
+      .returning({ signature: schema.workspaceUsers.signature });
+    if (!updated) throw new NotFoundException("Membership not found");
+    return updated;
   }
 
   async assignClient(user: AuthUser, input: AssignClientInput) {
