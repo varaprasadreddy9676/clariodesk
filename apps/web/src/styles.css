@@ -273,6 +273,13 @@ button:disabled {
   overflow: visible;
 }
 
+/* Button-radius token mismatch (redesign-implementation-guide.md finding
+   #4): this shared rule covers nav items, icon buttons, all primary
+   actions, and every tab strip at once — bumped from a flat 6px to the
+   8-10px target range (--radius-sm = 8px) to match the brief's button/
+   input radius spec. Single edit, verified visually across all consuming
+   surfaces (sidebar nav, ChannelList view-tabs, Composer tabs, ContextPanel
+   tabs, every icon-button and primary-action in the app). */
 .nav-item,
 .icon-button,
 .primary-action,
@@ -280,7 +287,7 @@ button:disabled {
 .composer-tabs button,
 .context-tabs button {
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .nav-item {
@@ -593,7 +600,7 @@ button:disabled {
   max-height: min(720px, calc(100vh - 40px));
   padding: 20px;
   overflow: auto;
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-xl);
   background: var(--surface);
   box-shadow: var(--shadow-floating);
@@ -607,6 +614,10 @@ button:disabled {
   gap: 12px;
 }
 
+/* Modal header: clear title + optional short description, per brief
+   section 15 — this is the header used by both NewChatDialog and
+   NewGroupDialog, kept as one shared markup rather than each dialog
+   re-styling its own header. */
 .conversation-dialog header h2,
 .conversation-dialog header span {
   display: block;
@@ -614,25 +625,32 @@ button:disabled {
 
 .conversation-dialog header h2 {
   margin: 0 0 2px;
-  font-size: 18px;
+  font-size: var(--text-card-heading);
 }
 
 .conversation-dialog header span,
 .conversation-dialog label small {
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: var(--text-meta);
 }
 
+/* Consistent close button — same 32px square icon-button treatment as the
+   rest of the app's `.icon-button`, not a bespoke dialog-only style. */
 .conversation-dialog header > button {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: var(--control-height-compact);
+  height: var(--control-height-compact);
   place-items: center;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-secondary);
+}
+
+.conversation-dialog header > button:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 
 .conversation-dialog label {
@@ -654,14 +672,15 @@ button:disabled {
 .conversation-dialog select,
 .conversation-dialog textarea {
   width: 100%;
+  min-height: var(--control-height-default);
   padding: 9px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   outline: 0;
   background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--text-body-secondary);
   resize: vertical;
 }
 
@@ -682,10 +701,10 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 34px;
+  min-height: var(--control-height-default);
   padding: 7px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-secondary);
 }
@@ -869,7 +888,7 @@ button:disabled {
   padding: 5px 9px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--text-label);
 }
 
 .composer-tabs button.is-active,
@@ -2116,10 +2135,10 @@ button:disabled {
 }
 
 .secondary-action {
-  min-height: 34px;
+  min-height: var(--control-height-default);
   padding: 7px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-secondary);
 }
@@ -2130,6 +2149,13 @@ button:disabled {
   overscroll-behavior: contain;
 }
 
+/* NotificationCenter — a floating popover, one of the brief's listed
+   glass-appropriate surfaces (section 4). Bumped from --radius-md to
+   --radius-lg to match other floating surfaces (emoji picker, canned
+   response picker) and added the glass treatment used by OpsBar, so this
+   popover reads consistently with the rest of the "elevated surface"
+   family instead of being the one floating panel left on a flat white
+   background. */
 .notification-panel {
   position: fixed;
   z-index: 90;
@@ -2138,9 +2164,11 @@ button:disabled {
   display: grid;
   width: min(360px, calc(100vw - 24px));
   max-height: min(680px, calc(100vh - 90px));
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   box-shadow: var(--shadow-floating);
   overflow: hidden;
 }
@@ -2160,12 +2188,12 @@ button:disabled {
 }
 
 .notification-panel-header strong {
-  font-size: 14px;
+  font-size: var(--text-card-heading);
 }
 
 .notification-panel-header span {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-label);
 }
 
 .notification-panel-actions {
@@ -2179,10 +2207,10 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
+  min-height: var(--control-height-compact);
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface-muted);
   color: var(--text-secondary);
 }
@@ -2223,20 +2251,20 @@ button:disabled {
 
 .notification-row-body strong {
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--text-body-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .notification-row-body span {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--text-label);
   line-height: 1.4;
 }
 
 .notification-row-body em {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-meta);
   font-style: normal;
 }
 
@@ -2254,7 +2282,7 @@ button:disabled {
 
 .context-section h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-body-secondary);
 }
 
 .ticket-stack {
@@ -2361,10 +2389,10 @@ button:disabled {
 
 .mapping-form select {
   width: 100%;
-  min-height: 34px;
+  min-height: var(--control-height-default);
   padding: 7px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   outline: none;
   background: var(--surface);
   color: var(--text);
@@ -2377,10 +2405,10 @@ button:disabled {
 }
 
 .mapping-actions button:not(.primary-action) {
-  min-height: 32px;
+  min-height: var(--control-height-compact);
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-secondary);
 }
@@ -2393,7 +2421,7 @@ button:disabled {
   min-height: 54px;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-secondary);
   text-align: left;
@@ -2415,7 +2443,7 @@ button:disabled {
 .search-result-row strong {
   overflow: hidden;
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--text-body);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2428,6 +2456,13 @@ button:disabled {
   font-style: normal;
 }
 
+/* Shared status/badge/chip primitive (components/StatusBadge.tsx). Reviewed
+   against brief section 13 ("restrained colors with good contrast"): the
+   badge shell itself stays neutral (--border/--surface) for every tone —
+   only the dot and text pick up the tone color via the paired `.status-*`
+   modifier class. This avoids the "fully colored badge" anti-pattern the
+   brief warns against while still keeping state legible at a glance. No
+   change made to the color logic itself, only the token pass below. */
 .status-badge,
 .phone-pill,
 .risk-pill,
@@ -2438,9 +2473,9 @@ button:disabled {
   min-height: 22px;
   padding: 2px 7px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface);
-  font-size: 11px;
+  font-size: var(--text-meta);
   line-height: 1;
   text-transform: capitalize;
 }
@@ -2874,9 +2909,9 @@ button:disabled {
 .row-actions button,
 .inline-form button,
 .data-row select {
-  min-height: 32px;
+  min-height: var(--control-height-compact);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-secondary);
 }
@@ -2985,10 +3020,10 @@ button:disabled {
 .phone-setup select,
 .data-row select {
   width: 100%;
-  min-height: 34px;
+  min-height: var(--control-height-default);
   padding: 7px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   outline: none;
   background: var(--surface);
   color: var(--text);
@@ -3015,7 +3050,7 @@ button:disabled {
   background: var(--surface);
   box-shadow: var(--shadow-floating);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-body-secondary);
 }
 
 .toast-ok {
@@ -3536,14 +3571,14 @@ button:disabled {
 }
 
 .data-row strong {
-  font-size: 14px;
+  font-size: var(--text-body);
   font-weight: 600;
 }
 
 .data-row span,
 .data-row em {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--text-body-secondary);
   font-style: normal;
 }
 
@@ -3562,49 +3597,6 @@ button:disabled {
   justify-content: center;
   gap: 5px;
   padding: 6px 9px;
-}
-
-.qr-box {
-  overflow: auto;
-  max-height: 180px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #0b1715;
-  color: #e8f7ed;
-  font-size: 12px;
-}
-
-.qr-panel {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: fit-content;
-  max-width: 100%;
-  margin-bottom: 14px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.qr-panel img {
-  width: 180px;
-  height: 180px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-
-.qr-panel strong,
-.qr-panel span {
-  display: block;
-}
-
-.qr-panel span {
-  max-width: 280px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.4;
 }
 
 .split-list {

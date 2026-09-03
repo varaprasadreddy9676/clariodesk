@@ -1,9 +1,16 @@
 # ClarioDesk Apple/macOS redesign — implementation guide for agents
 
-This is a hand-off document: a concrete, file-by-file work plan for whichever
-coding agent (Codex, Cursor, another Claude Code session, a human) picks up
-the remaining screens. It was produced by actually reading the current
-codebase — every finding below cites a real file/selector, not a generic
+**Status as of 2026-09-03 (session 2): every item below is complete.** This
+document is now a *reference* of what was done and why, not a work queue —
+kept accurate for whoever needs to understand the current state or extend
+it further. See `docs/design/redesign-checklist.md`'s Session log for the
+session-2 summary, including a note about a concurrent session that was
+shipping an unrelated feature on overlapping files during this pass.
+
+This was originally a hand-off document: a concrete, file-by-file work plan
+for whichever coding agent (Codex, Cursor, another Claude Code session, a
+human) picked up the remaining screens. It was produced by actually reading
+the codebase — every finding below cites a real file/selector, not a generic
 template. Pair it with **`docs/design/redesign-checklist.md`**, which tracks
 progress across sessions — **update that checklist's checkboxes as each item
 here is completed**, and add a dated entry to its "Session log."
@@ -139,126 +146,186 @@ These were found by actually grepping the codebase, not assumed:
    header exists, consistent hover/selected state) rather than each screen
    overriding it slightly differently.
 
+## What was actually done (session 2, 2026-09-03) — fixes applied
+
+Concrete resolution for each of the five findings above, plus one
+additional finding not caught in the original audit:
+
+1. **Empty states**: `EmptyState` in `components/States.tsx` extended with
+   `icon` (LucideIcon, defaults to `Inbox`), `hint`, and `compact` props.
+   `compact` drops the icon circle for inline "no results in this list"
+   spots (channel list, notification panel, context panel, search
+   results) where the full illustration was oversized. All three prior
+   patterns migrated and their dead CSS removed: the local `Empty`
+   component and `.setup-empty`/`.setup-empty-icon`/`.setup-empty-hint`
+   markup that used to live in `App.tsx` are gone; `.empty-panel` (used by
+   `ChannelList.tsx`, `NotificationCenter.tsx`, `ContextPanel.tsx`) is
+   gone. New CSS lives at `.empty-state`/`.empty-state-compact` in
+   `styles.css` (search for "Shared empty-state primitive").
+
+2. **Placeholder-as-label forms**: `TeamView`, `ClientsView`'s `ClientRow`
+   project form, and `SearchView` all now use `<Field>` (or a labeled
+   variant for `SearchView`'s search-box-style input, `.page-search-field`
+   in `styles.css`) instead of raw `<input placeholder="...">`.
+
+3. **Duplicated `.inline-form input, .inline-form select` CSS block**:
+   merged into one rule (also folded in `.field select`, needed once
+   `TeamView`'s role `<select>` moved inside a `.field` label).
+
+4. **Button radius 6px → 8-10px**: the shared
+   `.nav-item, .icon-button, .primary-action, .view-tabs button,
+   .composer-tabs button, .context-tabs button` rule now uses
+   `var(--radius-sm)` (8px). Every other hardcoded `border-radius: 6px` on
+   a button/input in the screens this pass touched was swapped too:
+   `.secondary-action`, `.segmented button`/`.row-actions button`/
+   `.inline-form button`/`.data-row select`, `.mapping-form select`,
+   `.mapping-actions button`, `.search-result-row`, `.conversation-dialog`
+   input/select/textarea + footer buttons + header close button,
+   `.notification-panel-actions button`. **Left alone on purpose** (out of
+   this pass's scope, verify before touching):
+   Timeline's `.reaction-picker button` (already-completed/verified
+   screen), `.canned-response-picker` + `.composer-attachment` (Composer-
+   adjacent, from a concurrently-shipped "quick replies" feature, not one
+   of this pass's screens), `.password-input`/`.auth-submit` (AuthScreen,
+   never in this pass's screen list).
+
+5. **Missing table primitive**: judgment call, not a rebuild. `.data-row`
+   (styles.css, search for `.data-row {`) was already one consistently-
+   specified component — 58px min-height, `var(--radius-md)`, same border/
+   background treatment — used identically by `TicketsView`, `TeamView`,
+   `ClientsView`, and `SettingsView`. Introducing TanStack Table here would
+   be disproportionate to what's actually simple 2-column key-value rows
+   with no sort/paginate/select requirements. Only change made:
+   `.data-row strong`/`.data-row span` font-sizes swapped for
+   `--text-body`/`--text-body-secondary` tokens (13px/14px values
+   unchanged — just documented via token instead of a magic number).
+
+6. **New finding — dead CSS**: `.qr-box` and `.qr-panel` (+ its `img`/
+   `strong`/`span` descendants) in `styles.css` had zero references in any
+   `.tsx` file — `PhonesView` was rewritten at some point to use
+   `.wa-link-qr`/`.wa-qr-pending` instead, orphaning this whole class
+   family. Removed.
+
+## Modularization (session 2, 2026-09-03) — App.tsx split up
+
+`App.tsx` was 2652 lines and contained every screen's component function,
+several shared helper components, and every pure data-mapping function in
+one file. Split into (no behavior change, verified via
+typecheck/lint/vitest/build before and after):
+
+- `apps/web/src/views/{TicketsView,SearchView,PhonesView,ClientsView,
+  TeamView,ReportsView,SettingsView,SetupEmpty}.tsx` — one file per screen.
+  `ClientsView.tsx` also contains its private `ClientRow` sub-component
+  (not exported, same as before). `ReportsView.tsx` also contains its
+  private `Metric` sub-component.
+- `apps/web/src/components/{Field,PanelTitle,ChannelContextMenu,
+  SearchResultGroup}.tsx` — shared helper components previously defined
+  inline in `App.tsx`. `ChannelContextMenu.tsx` also exports its
+  `ChannelMenuAction`/`ChannelMenuState` types (previously local to
+  `App.tsx`); `ContextPanel.tsx` now exports its own `ContextTab` type
+  (previously duplicated as a private type in `App.tsx`).
+- `apps/web/src/lib/ui-mappers.ts` — every pure `ApiX → UiX` mapper
+  (`toUiOps`, `toUiChannels`, `toUiMessage`, `toUiTicket`, `filterChannels`,
+  `memberName`, `messageTypePreview`, `collapsePreview`, `formatTime`) plus
+  the `MESSAGE_TYPE_PREVIEW` lookup table.
+- `apps/web/src/lib/qr.ts` — `toQrImage` (QR data → data-URL conversion),
+  used by `PhonesView`.
+
+`App.tsx` itself now holds only: `App`/`AuthScreen`/`Workbench` (the three
+top-level components that actually need the shared state/effects/realtime
+wiring), `buildNavItems` (kept here since it closes over the local
+`navIcons` map), and the `Toast`/`createWorkspaceSlug` local helpers. Final
+size: 1148 lines.
+
+**If you're extending a view further**: import shared helpers from their
+new locations (`../components/Field.js`, `../lib/ui-mappers.js`, etc.), not
+from `App.tsx` — nothing is re-exported from `App.tsx` anymore.
+
 ## Global token adoption — what's still outstanding
 
-The tokens exist (see "What's already done") but most of the file still has
-hardcoded values from before they existed. Don't do a single blind
-find-and-replace across the whole file — that's how you get a broken build
-from one unexpected selector collision. Instead, **as you touch each
-selector for a screen below, replace its hardcoded font-size/spacing/
-button-height with the matching token** if one applies. Leave selectors you
+As of session 2, tokens are applied across every screen/component this pass
+touched (see "What was actually done" above). What's genuinely still
+outstanding, for a future session:
+
+- **Timeline.tsx internals** beyond what was already redone (bubble
+  radius/canvas — done): reaction picker, message context menu, and
+  attachment viewer still have some hardcoded pixel values. Not touched
+  this pass since Timeline is an already-verified, working screen and the
+  guide's own instruction was "don't regress it, just do surrounding
+  chrome" — the surrounding chrome (ContextPanel) is now done, the
+  Timeline internals themselves were out of scope.
+- **Composer.tsx internals** beyond the composer-tabs radius fix (covered
+  by the shared rule): `.composer-attachment`, `.composer-toolbar`
+  buttons, `.reaction-picker` still have local hardcoded values. Same
+  reasoning — already a verified screen, not regressed, not proactively
+  touched.
+- **AuthScreen** (`App.tsx`'s `AuthScreen` function + its CSS): never one
+  of the screens/components listed in Step 5 of the checklist. Has its own
+  `.auth-*` class family with hardcoded radii/sizes (`.password-input`,
+  `.auth-submit`, etc.) that were deliberately left alone.
+- **CannedResponsePicker.tsx**: shipped by a concurrent session during
+  session 2 (see checklist Session log), not part of this redesign
+  effort's scope — has its own hardcoded 6px radius, not touched.
+
+Don't do a single blind find-and-replace across the whole file — that's how
+you get a broken build from one unexpected selector collision. As you touch
+each selector for a screen, replace its hardcoded font-size/spacing/
+button-height with the matching token if one applies. Leave selectors you
 aren't otherwise touching alone unless you're doing a dedicated, carefully
 verified sweep.
 
-## Per-screen work (Step 5 of the checklist)
+## Per-screen work (Step 5 of the checklist) — all complete as of session 2
 
-For every screen below: read the current JSX in `apps/web/src/App.tsx` at
-the given function, read its CSS via the class names used, then apply the
-token/consistency fixes without touching the data-fetching or event-handler
-logic. **After every screen: `npx tsc -p apps/web/tsconfig.json`, `npm run
-lint`, `npx vitest run`, then a live check** (see "Verification" below)
-before moving to the next screen.
+Every screen now lives in its own file under `apps/web/src/views/` (see
+"Modularization" above) rather than as a function inside `App.tsx`. Summary
+of what was done to each (see checklist Step 5 for the full detail):
 
-### TicketsView (`App.tsx` ~line 1137)
-- Empty state uses the `.setup-empty` pattern — migrate to the shared
-  `EmptyState` per finding #1 above.
-- `.data-row` here shows title + "priority / assigned to X" as secondary
-  text, plus a raw `<select>` for status. The `<select>` has no visible
-  label ("Status" or similar) — at minimum give it an `aria-label` if a
-  visible label doesn't fit the row layout (it currently has neither).
-- Status `<select>` height/radius should match the new form-control tokens
-  (`--control-height-default`, `--radius-sm`).
+- **TicketsView** (`views/TicketsView.tsx`): `EmptyState` migration, status
+  `<select>` given `aria-label`, control-height/radius tokens applied.
+- **SearchView** (`views/SearchView.tsx`): labeled search field
+  (`.page-search-field`/`.search-input-shell`) replacing the placeholder-
+  only input; confirmed `SearchResultGroup` never renders raw IDs.
+- **PhonesView** (`views/PhonesView.tsx`): moved verbatim, zero logic
+  changes — the `useEffect` polling, `startLink`/`doPhoneAction`, and
+  phone sorting/filtering are untouched, per the original instruction to
+  treat this as working/verified code.
+- **ClientsView + ClientRow** (`views/ClientsView.tsx`): both forms
+  converted to `<Field>`; `Empty` → `EmptyState`.
+- **TeamView** (`views/TeamView.tsx`): all three inputs + role select
+  converted to `<Field>`/labeled `.field` — this became the reference
+  implementation the other views' `<Field>` conversions followed.
+- **ReportsView** (`views/ReportsView.tsx`): moved verbatim — `Metric`'s
+  proportions (large value, compact label) were already correct.
+- **SettingsView** (`views/SettingsView.tsx`): moved verbatim, then wired
+  into the concurrently-shipped "reply signature" + "quick replies"
+  feature using the same `<Field>`/`EmptyState` patterns.
 
-### SearchView (`App.tsx` ~line 1197)
-- `.inline-form` here is a single text input + submit button — replace the
-  placeholder-as-label input per finding #2.
-- Uses `SearchResultGroup` (defined further down in `App.tsx`) — check its
-  rendering for the same "raw ID fragment" class of bug that was already
-  fixed once elsewhere this session (channel IDs leaking into UI); confirm
-  it's not still showing raw provider IDs.
-- Per brief section 14 (Search): confirm the search input itself is
-  34–40px tall with a search icon — it currently has no icon at all
-  (plain `<input placeholder="Search text">`). Consider adding one for
-  visual consistency with the sidebar's `.search-box` (ChannelList already
-  has a proper icon+input search box — reuse that visual pattern here
-  rather than inventing a second search style).
+### Shared components — all reviewed/fixed in session 2
 
-### PhonesView (`App.tsx` ~line 1272, large — ~570 lines)
-- This is the most complex remaining screen (QR linking flow, confetti
-  celebration, auto-sync polling). **Do not touch any of the `useEffect`
-  polling logic, the `startLink`/`doPhoneAction` functions, or the phone
-  sorting/filtering logic** — this is working, tested, real-world-verified
-  code (see git log: "fix: make the Baileys WhatsApp gateway actually
-  connect and sync" and related commits from the same day). Purely visual
-  pass only.
-- The phone-hero card, QR display, and additional-phones list all need a
-  token pass (font sizes, spacing, button heights) but keep every
-  conditional render branch exactly as-is.
-
-### ClientsView + ClientRow (`App.tsx` ~line 1846)
-- Same placeholder-as-label issue (finding #2) on both the client-create
-  form and the project-create form inside `ClientRow`.
-- `EmptyState`/`Empty` duplicate: this view already imports and uses
-  `Empty` (not `EmptyState`) — when consolidating per finding #1, update
-  this call site too.
-- `.data-row.tall` variant exists for rows with a nested `.mini-list` of
-  project chips — verify chip styling matches whatever chip/tag convention
-  gets established in Step 3 of the checklist (segmented control primitive
-  already exists; a chip primitive does not yet — check if one gets built
-  before this screen is reached, and reuse it rather than inventing a
-  fourth chip style).
-
-### TeamView (`App.tsx` ~line 1944)
-- Worst offender for finding #2: three raw inputs (display name, email,
-  password) plus a `<select>` for role, all placeholder-labeled, in one
-  `.inline-form` row. This is the best candidate to prove out the
-  `Field`-based replacement pattern before applying it elsewhere.
-- Member list rows (`.data-row`) show role/status as an `<em>` — fine
-  structurally, just needs the token pass (font-size should be
-  `--text-body-secondary` or `--text-label`, not whatever hardcoded value
-  is there now).
-
-### ReportsView (`App.tsx` ~line 2021)
-- Smallest screen — a refresh button + `.metric-grid` of `Metric` cards.
-  Check the `Metric` component's font sizes against
-  `--text-card-heading`/`--text-page-title` — reports metrics are the one
-  place the brief explicitly allows a larger number for the data value
-  itself ("Important numbers can be larger, but normal UI text should
-  remain compact") — don't shrink the metric value itself, just verify the
-  surrounding label/subtitle text isn't oversized.
-
-### SettingsView (`App.tsx` ~line 2052)
-- Two `.data-row`s (Session info + Notifications toggle) with
-  `.row-actions` button groups. Straightforward token pass — button
-  heights, spacing. No placeholder/label issues here (no inputs on this
-  screen).
-
-### Remaining shared components not yet touched
-- `apps/web/src/components/ContextPanel.tsx` — tabs (Ticket/Channel/
-  People/Events) use `.context-tabs` (shares the 6px-radius rule from
-  finding #4). Ticket rows here were already fixed earlier this session
-  (title-led layout, monospace secondary line) — don't regress that, just
-  do the token pass on surrounding chrome (panel header, tab strip).
-- `apps/web/src/components/NotificationCenter.tsx` — a floating panel
-  (`.notification-panel`, already uses `--shadow-floating` and
-  `--radius-md` — check it against the newer `--radius-lg`/glass tokens
-  since it's a "floating surface"/popover, one of the brief's listed
-  glass-appropriate locations).
-- `apps/web/src/components/NewChatDialog.tsx` and `NewGroupDialog.tsx` —
-  both modals; check them against `.conversation-dialog`'s existing CSS
-  (styles.css, search `.conversation-dialog`) for the modal-header glass
-  treatment the brief calls out (section 15: "clear title, optional short
-  description, structured body, predictable footer actions, consistent
-  close button"). Don't change what fields these dialogs collect or what
-  they submit.
-- `apps/web/src/components/Toast.tsx` — small (25 lines), quick token
-  pass only.
-- `apps/web/src/components/StatusBadge.tsx` — this is the shared
-  badge/pill primitive already used across the app (phone status, channel
-  status, risk/waiting pills). Getting this one right propagates
-  everywhere it's used — review it against brief section 13 (chips/status:
-  "restrained colors with good contrast") before touching individual
-  screens that consume it.
+- `apps/web/src/components/ContextPanel.tsx` — tab strip radius covered by
+  the shared button-radius fix; font-size tokens applied to
+  `.context-tabs button`/`.context-section h3`; empty state migrated to
+  `EmptyState`. Panel header intentionally left sharing `.timeline-header`
+  (Timeline is a separately-completed, verified screen — not touched here
+  to avoid regressing it).
+- `apps/web/src/components/NotificationCenter.tsx` — `.notification-panel`
+  bumped from `--radius-md` to `--radius-lg` and given the glass treatment
+  (`--glass-bg` + `backdrop-filter`), since it's a floating popover per
+  brief section 4. Header/action-button font-size and height tokens
+  applied. Empty state migrated to `EmptyState`.
+- `apps/web/src/components/NewChatDialog.tsx` / `NewGroupDialog.tsx` —
+  both already shared one `.conversation-dialog` header/footer markup
+  (verified: same `<header><h2/><span/></header>` structure, same
+  `aria-label="Close"` button) — no JSX changes needed, only the shared
+  CSS token pass (control-height/radius-sm on inputs, footer buttons, and
+  the close button; glass-border on the dialog border).
+- `apps/web/src/components/Toast.tsx` — CSS-only token pass
+  (`font-size: var(--text-body-secondary)`); the component itself had no
+  hardcoded styles to change.
+- `apps/web/src/components/StatusBadge.tsx` — reviewed against brief
+  section 13: the badge shell was already neutral for every tone (only
+  the dot/text carry semantic color, never the full badge background) —
+  correct as-is. Token pass only (`--radius-pill`, `--text-meta`).
 
 ## Verification (repeat for every screen/component touched)
 
@@ -284,9 +351,15 @@ before moving to the next screen.
 ## Git workflow
 
 Check `git branch --show-current` before committing — this repo's
-convention is to commit to `baseline/core-v1-backend`, then
+convention has been to commit to `baseline/core-v1-backend`, then
 `git checkout main && git merge baseline/core-v1-backend --no-ff && git push
 origin main && git checkout baseline/core-v1-backend`, then verify CI via
 `gh run list --limit 1 --repo <owner>/<repo>` until it shows
-`completed`/`success`. Follow whatever the current repo convention is at
-the time you pick this up — check recent commits first.
+`completed`/`success`. **Note from session 2**: this repo had multiple
+concurrent sessions/agents committing to it during this pass, and
+`git branch --show-current` changed from `baseline/core-v1-backend` to
+`main` mid-session without any branch-switch command being run by this
+session — check `git branch --show-current` immediately before every
+commit, not just once at the start, if you suspect concurrent activity.
+Follow whatever the current repo convention is at the time you pick this
+up — check recent commits first.

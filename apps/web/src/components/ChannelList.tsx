@@ -14,9 +14,8 @@ import type { Channel } from "../types.js";
 import type { ChannelView } from "../lib/whatsapp-sort.js";
 import { avatarColor, avatarInitials } from "../lib/avatar.js";
 import { PhoneStatusPill, WaitingPill } from "./StatusBadge.js";
-
+import { EmptyState } from "./States.js";
 export type { ChannelView } from "../lib/whatsapp-sort.js";
-
 export function ChannelList({
   channels,
   activeId,
@@ -53,7 +52,6 @@ export function ChannelList({
     estimateSize: () => 72,
     overscan: 8,
   });
-
   // On mobile, this panel is toggled via CSS display:none (swapping to the
   // active conversation), not unmounted — going from display:none back to
   // visible didn't reliably re-fire the virtualizer's own ResizeObserver,
@@ -66,7 +64,6 @@ export function ChannelList({
     observer.observe(node);
     return () => observer.disconnect();
   }, [rowVirtualizer]);
-
   function startLongPress(channel: Channel, e: React.TouchEvent) {
     longPressFired.current = false;
     const touch = e.touches[0];
@@ -77,11 +74,9 @@ export function ChannelList({
       onOpenMenu(channel, x, y);
     }, 500);
   }
-
   function cancelLongPress() {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
   }
-
   const views: Array<{ id: ChannelView; label: string }> = [
     { id: "all", label: "All" },
     { id: "groups", label: "Groups" },
@@ -89,7 +84,6 @@ export function ChannelList({
     { id: "unread", label: "Unread" },
     { id: "archived", label: "Archived" },
   ];
-
   return (
     <section className="channel-list" aria-label="Channels">
       <div className="panel-header">
@@ -103,7 +97,6 @@ export function ChannelList({
           <PenSquare size={19} />
         </button>
       </div>
-
       {syncing ? (
         <div className="channel-sync-status" role="status" aria-live="polite">
           <RefreshCcw size={14} aria-hidden="true" />
@@ -113,7 +106,6 @@ export function ChannelList({
           </span>
         </div>
       ) : null}
-
       <label className="search-box">
         <Search size={15} aria-hidden="true" />
         <input
@@ -123,7 +115,6 @@ export function ChannelList({
           onChange={(event) => onQueryChange(event.target.value)}
         />
       </label>
-
       <div className="view-tabs" role="tablist" aria-label="Inbox views">
         {views.map((item) => (
           <button
@@ -138,13 +129,13 @@ export function ChannelList({
           </button>
         ))}
       </div>
-
       <div className="channel-rows" role="list" ref={scrollRef}>
         {channels.length === 0 ? (
-          <div className="empty-panel">
-            <strong>No channels match</strong>
-            <span>Sync chats from a connected phone or clear the filter.</span>
-          </div>
+          <EmptyState
+            compact
+            title="No channels match"
+            body="Sync chats from a connected phone or clear the filter."
+          />
         ) : (
           <div
             style={{
@@ -190,66 +181,78 @@ export function ChannelList({
                     onTouchMove={cancelLongPress}
                     onTouchCancel={cancelLongPress}
                     onKeyDown={(event) => {
-                      if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+                      if (
+                        event.key !== "ContextMenu" &&
+                        !(event.shiftKey && event.key === "F10")
+                      )
+                        return;
                       event.preventDefault();
                       const rect = event.currentTarget.getBoundingClientRect();
                       onOpenMenu(channel, rect.right - 12, rect.top + 12);
                     }}
                   >
-                  <span
-                    className="channel-avatar"
-                    style={{ background: avatarColor(channel.title) }}
-                    aria-hidden="true"
-                  >
-                    {channel.channelType === "group" ? (
-                      <Users size={20} />
-                    ) : avatarInitials(channel.title) === "#" ? (
-                      <User size={20} />
-                    ) : (
-                      avatarInitials(channel.title)
-                    )}
-                    {channel.avatarUrl ? (
-                      <img
-                        src={channel.avatarUrl}
-                        alt=""
-                        referrerPolicy="no-referrer"
-                        onError={(event) => {
-                          event.currentTarget.hidden = true;
-                        }}
-                      />
-                    ) : null}
-                  </span>
-                  <span className="channel-row-body">
-                    <span className="channel-row-top">
-                      <strong className="channel-name">{channel.title}</strong>
-                      <span className="channel-time">{channel.lastTime}</span>
-                    </span>
-                    <span className="channel-row-bottom">
-                      <span className="channel-preview">{channel.lastMessage}</span>
-                      <span className="channel-counters">
-                        {channel.isMuted ? (
-                          <BellOff size={13} aria-label="Muted" />
-                        ) : null}
-                        {channel.isPinned ? <Pin size={13} aria-label="Pinned" /> : null}
-                        {channel.unread > 0 ? (
-                          <span className="channel-badge">{channel.unread}</span>
-                        ) : null}
-                      </span>
-                    </span>
-                    <span className="channel-meta">
-                      <span className="channel-kind">
-                        {channel.channelType === "group" ? "Group" : "Direct"}
-                        {channel.client ? ` · ${channel.client}` : ""}
-                      </span>
-                      <PhoneStatusPill status={channel.phoneStatus} />
-                      <WaitingPill since={channel.awaitingResponseSince} />
-                      {channel.openTickets > 0 ? (
-                        <em className="channel-tickets">
-                          {channel.openTickets} tickets
-                        </em>
+                    <span
+                      className="channel-avatar"
+                      style={{ background: avatarColor(channel.title) }}
+                      aria-hidden="true"
+                    >
+                      {channel.channelType === "group" ? (
+                        <Users size={20} />
+                      ) : avatarInitials(channel.title) === "#" ? (
+                        <User size={20} />
+                      ) : (
+                        avatarInitials(channel.title)
+                      )}
+                      {channel.avatarUrl ? (
+                        <img
+                          src={channel.avatarUrl}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          onError={(event) => {
+                            event.currentTarget.hidden = true;
+                          }}
+                        />
                       ) : null}
                     </span>
-                  </span>
+                    <span className="channel-row-body">
+                      <span className="channel-row-top">
+                        <strong className="channel-name">
+                          {channel.title}
+                        </strong>
+                        <span className="channel-time">{channel.lastTime}</span>
+                      </span>
+                      <span className="channel-row-bottom">
+                        <span className="channel-preview">
+                          {channel.lastMessage}
+                        </span>
+                        <span className="channel-counters">
+                          {channel.isMuted ? (
+                            <BellOff size={13} aria-label="Muted" />
+                          ) : null}
+                          {channel.isPinned ? (
+                            <Pin size={13} aria-label="Pinned" />
+                          ) : null}
+                          {channel.unread > 0 ? (
+                            <span className="channel-badge">
+                              {channel.unread}
+                            </span>
+                          ) : null}
+                        </span>
+                      </span>
+                      <span className="channel-meta">
+                        <span className="channel-kind">
+                          {channel.channelType === "group" ? "Group" : "Direct"}
+                          {channel.client ? ` · ${channel.client}` : ""}
+                        </span>
+                        <PhoneStatusPill status={channel.phoneStatus} />
+                        <WaitingPill since={channel.awaitingResponseSince} />
+                        {channel.openTickets > 0 ? (
+                          <em className="channel-tickets">
+                            {channel.openTickets} tickets
+                          </em>
+                        ) : null}
+                      </span>
+                    </span>
                   </button>
                   <button
                     type="button"
