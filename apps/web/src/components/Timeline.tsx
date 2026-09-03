@@ -260,7 +260,13 @@ export function Timeline({
                   (channel.channelType === "group" ? "Group" : "Direct chat")}
                 {channel.project ? ` / ${channel.project}` : ""}
               </span>
-              <PhoneStatusPill status={channel.phoneStatus} />
+              {/* The global connection pill in the top bar already covers
+                  the healthy case — repeating "Connected" here reads as
+                  duplicated status. Only surface this when the phone
+                  needs attention (syncing/degraded/QR required). */}
+              {channel.phoneStatus !== "connected" ? (
+                <PhoneStatusPill status={channel.phoneStatus} />
+              ) : null}
               <WaitingPill since={channel.awaitingResponseSince} />
             </div>
           </div>
