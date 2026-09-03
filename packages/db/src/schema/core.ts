@@ -35,6 +35,13 @@ export const workspaceUsers = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     role: workspaceRoleEnum("role").notNull().default("agent"),
     status: text("status").notNull().default("active"),
+    /**
+     * Optional reply signature (e.g. "L1 Team", "Functional Expert") an
+     * agent can prepend to outbound WhatsApp replies — mirrors the manual
+     * "*L1 Team:*" convention support desks already use on a shared number
+     * that has no per-agent identity on WhatsApp.
+     */
+    signature: text("signature"),
     ...timestamps,
   },
   (t) => [

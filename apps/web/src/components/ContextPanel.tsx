@@ -2,8 +2,9 @@ import { AlertTriangle, CheckCircle2, Clock3, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Channel, Ticket } from "../types.js";
 import { ChannelStatusBadge, PhoneStatusPill } from "./StatusBadge.js";
+import { EmptyState } from "./States.js";
 
-type ContextTab = "Ticket" | "Channel" | "People" | "Events";
+export type ContextTab = "Ticket" | "Channel" | "People" | "Events";
 
 export function ContextPanel({
   channel,
@@ -53,10 +54,11 @@ export function ContextPanel({
           <h3>Open Tickets</h3>
           <div className="ticket-stack">
             {tickets.length === 0 ? (
-              <div className="empty-panel compact">
-                <strong>No open tickets</strong>
-                <span>Create one from an inbound message.</span>
-              </div>
+              <EmptyState
+                compact
+                title="No open tickets"
+                body="Create one from an inbound message."
+              />
             ) : null}
             {tickets.map((ticket) => (
               <article className={`ticket-row priority-${ticket.priority}`} key={ticket.id}>

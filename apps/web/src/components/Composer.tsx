@@ -1,4 +1,12 @@
-import { Lock, Paperclip, Send, Smile, X, Zap } from "lucide-react";
+import {
+  Lock,
+  Paperclip,
+  Send,
+  Signature as SignatureIcon,
+  Smile,
+  X,
+  Zap,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClarioApiClient } from "../api.js";
 import type { Channel } from "../types.js";
@@ -21,12 +29,15 @@ export function Composer({
   api,
   channel,
   draft,
+  signature,
   onSendReply,
   onCreateNote,
 }: {
   api: ClarioApiClient;
   channel: Channel;
   draft?: ComposerDraft | null;
+  /** The current agent's reply signature (e.g. "L1 Team"), set in Settings. */
+  signature?: string | null;
   onSendReply: (input: { body: string; attachment?: File }) => Promise<void>;
   onCreateNote: (body: string) => Promise<void>;
 }) {
@@ -35,6 +46,7 @@ export function Composer({
   const [attachment, setAttachment] = useState<File | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
+  const [signOutbound, setSignOutbound] = useState(true);
   const [submitState, setSubmitState] = useState<"idle" | "sending">("idle");
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -73,8 +85,12 @@ export function Composer({
     setSubmitState("sending");
     try {
       if (mode === "reply") {
+        const outboundBody =
+          signature && signOutbound
+            ? `*${signature}:*\n${body.trim()}`
+            : body.trim();
         await onSendReply({
-          body: body.trim(),
+          body: outboundBody,
           ...(attachment ? { attachment } : {}),
         });
       } else {
@@ -247,6 +263,26 @@ export function Composer({
                   />
                 ) : null}
               </div>
+              {signature ? (
+                <button
+                  type="button"
+                  aria-label={
+                    signOutbound
+                      ? `Signing as "${signature}" — click to send unsigned`
+                      : `Not signing — click to sign as "${signature}"`
+                  }
+                  title={
+                    signOutbound
+                      ? `Signing as "${signature}"`
+                      : `Sign as "${signature}"`
+                  }
+                  aria-pressed={signOutbound}
+                  className={signOutbound ? "is-active" : ""}
+                  onClick={() => setSignOutbound((value) => !value)}
+                >
+                  <SignatureIcon size={17} />
+                </button>
+              ) : null}
             </>
           ) : (
             <Lock size={16} aria-hidden="true" />

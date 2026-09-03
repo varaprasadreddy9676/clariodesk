@@ -135,6 +135,14 @@ export type ApiTeamMember = {
   status: string;
 };
 
+export type ApiMe = {
+  userId: string;
+  email: string;
+  displayName: string;
+  role: string;
+  signature: string | null;
+};
+
 export type ApiOpsSummary = {
   generatedAt: string;
   phones: {
@@ -463,6 +471,19 @@ export class ClarioApiClient {
 
   teamMembers(): Promise<ApiTeamMember[]> {
     return this.request("/team/members");
+  }
+
+  me(): Promise<ApiMe> {
+    return this.request("/team/me");
+  }
+
+  updateMySignature(
+    signature: string | null,
+  ): Promise<{ signature: string | null }> {
+    return this.request("/team/me/signature", {
+      method: "PATCH",
+      body: { signature },
+    });
   }
 
   createUser(input: CreateUserInput): Promise<{ userId: string }> {

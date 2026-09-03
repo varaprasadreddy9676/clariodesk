@@ -1,6 +1,7 @@
 import { Bell, CheckCheck, Clock3, Phone, Ticket, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { RealtimeNotification, RealtimeStatus } from "../realtime.js";
+import { EmptyState } from "./States.js";
 
 export function NotificationCenter({
   open,
@@ -69,10 +70,11 @@ export function NotificationCenter({
       </div>
       <div className="notification-list">
         {notifications.length === 0 ? (
-          <div className="empty-panel compact">
-            <strong>No realtime events yet</strong>
-            <span>Messages, tickets, notes, and phone events will appear here.</span>
-          </div>
+          <EmptyState
+            compact
+            title="No realtime events yet"
+            body="Messages, tickets, notes, and phone events will appear here."
+          />
         ) : null}
         {notifications.map((notification) => (
           <article
