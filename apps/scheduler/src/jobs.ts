@@ -1,12 +1,15 @@
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { schema, type Database } from "@clariodesk/db";
 import { ObjectStorage } from "@clariodesk/storage";
 import type { Logger } from "@clariodesk/logger";
+import { GatewayAdapterFactory } from "@clariodesk/gateway-adapters";
+import type { PhoneStatus } from "@clariodesk/types";
 
 export type JobDeps = {
   db: Database;
   storage: ObjectStorage;
   logger: Logger;
+  adapters: GatewayAdapterFactory;
   config: {
     RAW_EVENT_RETENTION_DAYS: number;
     MESSAGE_RETENTION_DAYS: number;
@@ -14,6 +17,21 @@ export type JobDeps = {
     PHONE_STALE_MINUTES: number;
     STALE_SYNC_THRESHOLD_SECONDS: number;
   };
+};
+
+/**
+ * Maps a gateway connection status onto our phone-instance status enum.
+ * Mirrors apps/api/src/phones/phones.service.ts's STATUS_MAP — kept as a
+ * small local copy rather than a shared package export since it's a 6-line
+ * constant and the two apps otherwise share no adapter-facing code.
+ */
+const STATUS_MAP: Record<string, PhoneStatus> = {
+  connected: "connected",
+  syncing: "syncing",
+  disconnected: "disconnected",
+  qr_required: "qr_required",
+  degraded: "degraded",
+  restricted: "restricted",
 };
 
 const PURGE_PLACEHOLDER =
@@ -110,6 +128,76 @@ export async function purgeMessages(deps: JobDeps): Promise<void> {
       and id not in (select source_message_id from tickets where source_message_id is not null)
   `);
   deps.logger.info("message retention pass complete");
+}
+
+/**
+ * Refresh `lastSeenAt` for phones the app already believes are
+ * connected/syncing, by actively polling the gateway for live status.
+ *
+ * Without this, `lastSeenAt` is only ever written by user-triggered API
+ * calls (connect/status/syncGroups in phones.service.ts) or the frontend's
+ * QR/syncing poll — which stops polling once a phone reaches "connected".
+ * A perfectly healthy phone that simply has no operator interaction for
+ * PHONE_STALE_MINUTES would then be falsely flagged "degraded" by
+ * checkPhoneHealth below, purely from inactivity. This job closes that gap
+ * by heartbeating every connected/syncing phone directly against the
+ * gateway before staleness is evaluated. A phone whose gateway call fails
+ * (e.g. genuinely unreachable) is left alone, so it can still correctly go
+ * stale and degrade.
+ */
+export async function refreshConnectedPhones(deps: JobDeps): Promise<number> {
+  const phones = await deps.db
+    .select({
+      id: schema.phoneInstances.id,
+      status: schema.phoneInstances.status,
+      adapterType: schema.phoneInstances.adapterType,
+      providerInstanceId: schema.phoneInstances.providerInstanceId,
+      gatewayBaseUrl: schema.phoneInstances.gatewayBaseUrl,
+      encryptedApiKey: schema.phoneInstances.encryptedApiKey,
+    })
+    .from(schema.phoneInstances)
+    .where(
+      inArray(schema.phoneInstances.status, ["connected", "syncing"] as const),
+    );
+
+  let refreshed = 0;
+  for (const phone of phones) {
+    try {
+      const adapter = deps.adapters.forPhone(phone);
+      if (!adapter.getConnectionInfo && !adapter.getConnectionStatus) continue;
+      const live = adapter.getConnectionInfo
+        ? await adapter.getConnectionInfo({
+            providerInstanceId: phone.providerInstanceId ?? phone.id,
+          })
+        : {
+            status: await adapter.getConnectionStatus!({
+              providerInstanceId: phone.providerInstanceId ?? phone.id,
+            }),
+          };
+      const liveStatus = STATUS_MAP[live.status] ?? "degraded";
+      // A ready transport can still be mid-import; don't downgrade syncing
+      // to connected here — that transition belongs to the sync job itself.
+      const mapped =
+        phone.status === "syncing" && liveStatus === "connected"
+          ? "syncing"
+          : liveStatus;
+      await deps.db
+        .update(schema.phoneInstances)
+        .set({
+          status: mapped,
+          lastSeenAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.phoneInstances.id, phone.id));
+      refreshed += 1;
+    } catch (err) {
+      deps.logger.warn(
+        { phoneId: phone.id, err: String(err) },
+        "phone heartbeat failed",
+      );
+    }
+  }
+  return refreshed;
 }
 
 /**
