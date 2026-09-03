@@ -47,6 +47,8 @@ export type GatewayMessage = {
   fromMe: boolean;
   hasMedia: boolean;
   quotedMessageId: string | null;
+  /** The chat's currently-known name/subject, if any — see chatMeta. */
+  chatTitle: string | null;
 };
 
 export type GatewayGroup = {
@@ -839,6 +841,11 @@ export class GatewaySession extends EventEmitter {
     const normalized = normalizeMessage(message, this.contactNames);
     if (!normalized) return null;
     normalized.chatId = chatId; // use the canonical (post-LID-resolution) id
+    // A chat's name (group subject, or a direct contact's push name) is only
+    // known via chats/contacts events, not on the message itself — attach
+    // whatever this session currently knows so a brand-new channel isn't
+    // created with a blank title (see `meta` above).
+    normalized.chatTitle = meta?.name ?? null;
     const list = this.messagesByChat.get(chatId) ?? [];
     if (!list.some((existing) => existing.id === normalized.id)) {
       if (isHistory) list.unshift(normalized);
@@ -969,6 +976,7 @@ function normalizeMessage(
     fromMe: Boolean(message.key.fromMe),
     hasMedia,
     quotedMessageId: contextInfo?.stanzaId ?? null,
+    chatTitle: null, // filled in by recordMessage(), which has chatMeta
   };
 }
 

@@ -25,8 +25,12 @@ class FakeStore implements NormalizationStore {
   };
   internalSenders = new Set<string>();
   private seq = 0;
+  lastGetOrCreateChannelInput: { chatTitle?: string | null } | null = null;
 
-  async getOrCreateChannel(): Promise<ChannelContext> {
+  async getOrCreateChannel(input: {
+    chatTitle?: string | null;
+  }): Promise<ChannelContext> {
+    this.lastGetOrCreateChannelInput = input;
     return this.channel;
   }
   async resolveSender(input: {
@@ -159,6 +163,12 @@ describe("normalizeEvent orchestration", () => {
     expect(store.messages[0]?.sentByType).toBe("client_user");
     expect(store.messages[0]?.clientId).toBe("client1");
     expect(store.lastTouched?.channelId).toBe("ch1");
+  });
+
+  it("passes the event's chatTitle through to getOrCreateChannel", async () => {
+    const store = new FakeStore();
+    await normalizeEvent(evt({ chatTitle: "Acme Support" }), ctx(), store);
+    expect(store.lastGetOrCreateChannelInput?.chatTitle).toBe("Acme Support");
   });
 
   it("dedupes a message already stored (idempotency)", async () => {

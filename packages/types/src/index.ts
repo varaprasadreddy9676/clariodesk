@@ -217,6 +217,12 @@ export type NormalizedGatewayEvent = {
   revokeTargetProviderMessageId?: string;
   /** Group metadata change (rename/description/participants) — see GroupMetadataEvent. */
   groupMetadata?: GroupMetadataChange;
+  /**
+   * The chat's current title, if the adapter already knows it (e.g. from its
+   * own local chat cache) — used only to seed a brand-new channel's title at
+   * creation time, never to overwrite one that already has a title.
+   */
+  chatTitle?: string | null;
   /** Group/metadata events the adapter could not map to a message. */
   systemEventType?: string;
   raw?: unknown;

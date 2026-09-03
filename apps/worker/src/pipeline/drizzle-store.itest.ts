@@ -101,6 +101,86 @@ describe("DrizzleNormalizationStore (integration)", () => {
     expect(channels[0]?.status).toBe("unmapped");
   });
 
+  it("seeds the title from chatTitle when auto-creating a channel", async () => {
+    await normalizeEvent(
+      evt({
+        providerMessageId: "T1",
+        providerChatId: "901@g.us",
+        chatTitle: "Acme Support Group",
+      }),
+      ctx(),
+      store,
+    );
+    const channels = await db
+      .select()
+      .from(schema.channels)
+      .where(eq(schema.channels.providerChatId, "901@g.us"));
+    expect(channels[0]?.title).toBe("Acme Support Group");
+  });
+
+  it("leaves the title blank when chatTitle is not yet known, rather than guessing", async () => {
+    await normalizeEvent(
+      evt({ providerMessageId: "T2", providerChatId: "902@g.us" }),
+      ctx(),
+      store,
+    );
+    const channels = await db
+      .select()
+      .from(schema.channels)
+      .where(eq(schema.channels.providerChatId, "902@g.us"));
+    expect(channels[0]?.title).toBeNull();
+  });
+
+  it("self-heals a blank title once a later message reveals the chat's name", async () => {
+    await normalizeEvent(
+      evt({ providerMessageId: "T5", providerChatId: "905@g.us" }),
+      ctx(),
+      store,
+    );
+    await normalizeEvent(
+      evt({
+        providerMessageId: "T6",
+        providerChatId: "905@g.us",
+        chatTitle: "Now We Know The Name",
+      }),
+      ctx(),
+      store,
+    );
+    const channels = await db
+      .select()
+      .from(schema.channels)
+      .where(eq(schema.channels.providerChatId, "905@g.us"));
+    expect(channels).toHaveLength(1);
+    expect(channels[0]?.title).toBe("Now We Know The Name");
+  });
+
+  it("does not overwrite an existing title on a later message in the same channel", async () => {
+    await normalizeEvent(
+      evt({
+        providerMessageId: "T3",
+        providerChatId: "903@g.us",
+        chatTitle: "Original Name",
+      }),
+      ctx(),
+      store,
+    );
+    await normalizeEvent(
+      evt({
+        providerMessageId: "T4",
+        providerChatId: "903@g.us",
+        chatTitle: "A Stale Cached Name",
+      }),
+      ctx(),
+      store,
+    );
+    const channels = await db
+      .select()
+      .from(schema.channels)
+      .where(eq(schema.channels.providerChatId, "903@g.us"));
+    expect(channels).toHaveLength(1);
+    expect(channels[0]?.title).toBe("Original Name");
+  });
+
   it("auto-creates a contact + identity + channel membership for the sender", async () => {
     const out = await normalizeEvent(
       evt({
