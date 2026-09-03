@@ -36,6 +36,7 @@ import {
   ClarioApiClient,
   readStoredSession,
   storeSession,
+  type ApiCannedResponse,
   type ApiChannel,
   type ApiCustomer,
   type ApiMessage,
@@ -429,6 +430,7 @@ function Workbench({
   const tickets = useAsyncData(() => api.tickets(), [api]);
   const clients = useAsyncData(() => api.clients(), [api]);
   const team = useAsyncData(() => api.teamMembers(), [api]);
+  const cannedResponses = useAsyncData(() => api.cannedResponses(), [api]);
 
   const mappedTickets = useMemo(
     () => (tickets.data ?? []).map((ticket) => toUiTicket(ticket, team.data ?? [])),
@@ -493,8 +495,17 @@ function Workbench({
       ticketsRefreshRef.current(),
       clients.refresh(),
       team.refresh(),
+      cannedResponses.refresh(),
     ]);
-  }, [channelsRefreshRef, clients, opsRefreshRef, phonesRefreshRef, team, ticketsRefreshRef]);
+  }, [
+    cannedResponses,
+    channelsRefreshRef,
+    clients,
+    opsRefreshRef,
+    phonesRefreshRef,
+    team,
+    ticketsRefreshRef,
+  ]);
 
   const runAction = useCallback(
     async (action: () => Promise<void>, success: string) => {
@@ -977,6 +988,7 @@ function Workbench({
                   }}
                 />
                 <Composer
+                  api={api}
                   channel={activeChannel}
                   draft={composerDraft}
                   onSendReply={async ({ body, attachment }) => {
@@ -1075,6 +1087,9 @@ function Workbench({
             api={api}
             onSignOut={onSignOut}
             onRefresh={() => void refreshAll()}
+            cannedResponses={cannedResponses.data ?? []}
+            onCannedResponsesChanged={() => cannedResponses.refresh()}
+            runAction={runAction}
           />
         ) : null}
       </main>
@@ -2054,13 +2069,21 @@ function SettingsView({
   api,
   onSignOut,
   onRefresh,
+  cannedResponses,
+  onCannedResponsesChanged,
+  runAction,
 }: {
   session: AuthSession;
   api: ClarioApiClient;
   onSignOut: () => void;
   onRefresh: () => void;
+  cannedResponses: ApiCannedResponse[];
+  onCannedResponsesChanged: () => void;
+  runAction: (action: () => Promise<void>, success: string) => Promise<void>;
 }) {
   const push = usePushSubscription(api);
+  const [qrTitle, setQrTitle] = useState("");
+  const [qrBody, setQrBody] = useState("");
 
   return (
     <section className="page-panel">
@@ -2115,6 +2138,74 @@ function SettingsView({
             )}
           </div>
         </article>
+      </div>
+      <PanelTitle
+        title="Quick replies"
+        subtitle="Shared team responses agents can insert into the composer"
+      />
+      {session.role !== "viewer" ? (
+        <div className="inline-form">
+          <input
+            value={qrTitle}
+            onChange={(event) => setQrTitle(event.target.value)}
+            placeholder="Title (e.g. Refund policy)"
+          />
+          <input
+            value={qrBody}
+            onChange={(event) => setQrBody(event.target.value)}
+            placeholder="Reply text"
+          />
+          <button
+            className="primary-action"
+            type="button"
+            disabled={!qrTitle.trim() || !qrBody.trim()}
+            onClick={() =>
+              void runAction(async () => {
+                await api.createCannedResponse({
+                  title: qrTitle.trim(),
+                  body: qrBody.trim(),
+                });
+                setQrTitle("");
+                setQrBody("");
+                onCannedResponsesChanged();
+              }, "Quick reply created")
+            }
+          >
+            Add quick reply
+          </button>
+        </div>
+      ) : null}
+      <div className="table-list">
+        {cannedResponses.length === 0 ? (
+          <Empty
+            title="No quick replies yet"
+            body="Add one above so the whole team can reuse it in the composer."
+          />
+        ) : (
+          cannedResponses.map((item) => (
+            <article className="data-row" key={item.id}>
+              <div>
+                <strong>{item.title}</strong>
+                <span>{item.body}</span>
+              </div>
+              {session.role !== "viewer" ? (
+                <div className="row-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void runAction(async () => {
+                        await api.deleteCannedResponse(item.id);
+                        onCannedResponsesChanged();
+                      }, "Quick reply deleted")
+                    }
+                  >
+                    Delete
+                  </button>
+                </div>
+              ) : null}
+            </article>
+          ))
+        )}
       </div>
     </section>
   );
