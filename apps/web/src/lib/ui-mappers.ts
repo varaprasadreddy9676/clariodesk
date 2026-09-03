@@ -79,6 +79,15 @@ export function toUiChannels(
 }
 
 export function toUiMessage(message: ApiMessage): Message {
+  const media = message.media ?? [];
+  // A caption-less media message (the common case for photos/videos/docs)
+  // has no body at all -- let the media render on its own rather than
+  // showing a raw "[image]"/"[document]" placeholder above it. Only a
+  // truly bodyless, medialess message (a type the gateway couldn't
+  // classify) gets a friendly type label instead of an empty bubble.
+  const body =
+    message.body ??
+    (media.length > 0 ? "" : messageTypePreview(message.messageType));
   return {
     id: message.id,
     kind: message.status === "deleted" ? "deleted" : message.direction,
@@ -89,8 +98,8 @@ export function toUiMessage(message: ApiMessage): Message {
         : message.sentByType === "client_user"
           ? "Customer"
           : "WhatsApp user"),
-    body: message.body ?? `[${message.messageType}]`,
-    media: message.media ?? [],
+    body,
+    media,
     timestampAt: message.providerTimestamp,
     timestamp: formatTime(message.providerTimestamp),
     status: message.status,
@@ -103,6 +112,7 @@ export function toUiTicket(
 ): UiTicket {
   return {
     id: ticket.id.slice(0, 8),
+    channelId: ticket.channelId,
     title: ticket.title,
     status: ticket.status,
     priority: ticket.priority === "low" ? "normal" : ticket.priority,

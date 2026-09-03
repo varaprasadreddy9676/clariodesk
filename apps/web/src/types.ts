@@ -65,6 +65,7 @@ export type Message = {
 
 export type Ticket = {
   id: string;
+  channelId: string;
   title: string;
   status: "open" | "pending" | "closed";
   priority: "normal" | "high" | "urgent";

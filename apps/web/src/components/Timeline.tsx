@@ -318,8 +318,8 @@ export function Timeline({
               <strong>No messages imported for this chat yet</strong>
               <span>
                 Chat discovery is working. Recent history will load
-                automatically when the gateway supports it; live messages
-                appear here in real time.
+                automatically when the gateway supports it; live messages appear
+                here in real time.
               </span>
             </div>
           ) : null}
@@ -572,25 +572,45 @@ function isEmojiOnlyMessage(body: string): boolean {
   return value.replace(emojiPattern, "").trim().length === 0;
 }
 
+// Splits on WhatsApp's own inline markers (*bold*, _italic_, ~strike~) plus
+// bare URLs, in one pass — the marker body can't start/end with whitespace
+// or cross a line break, matching how WhatsApp itself treats them, so
+// ordinary text like "5 * 3" or a bullet "* item" is never mistaken for
+// formatting.
+const INLINE_MARKDOWN =
+  /(\*[^\s*\n](?:[^*\n]*[^\s*\n])?\*|_[^\s_\n](?:[^_\n]*[^\s_\n])?_|~[^\s~\n](?:[^~\n]*[^\s~\n])?~|https?:\/\/[^\s]+)/g;
+
+function renderInlinePart(part: string, key: string) {
+  if (/^https?:\/\//i.test(part)) {
+    return (
+      <a
+        key={key}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {part}
+      </a>
+    );
+  }
+  if (part.length > 1 && part.startsWith("*") && part.endsWith("*")) {
+    return <strong key={key}>{part.slice(1, -1)}</strong>;
+  }
+  if (part.length > 1 && part.startsWith("_") && part.endsWith("_")) {
+    return <em key={key}>{part.slice(1, -1)}</em>;
+  }
+  if (part.length > 1 && part.startsWith("~") && part.endsWith("~")) {
+    return <s key={key}>{part.slice(1, -1)}</s>;
+  }
+  return part;
+}
+
 function MessageBody({ body }: { body: string }) {
-  const parts = body.split(/(https?:\/\/[^\s]+)/gi);
+  const parts = body.split(INLINE_MARKDOWN);
   return (
     <p>
-      {parts.map((part, index) =>
-        /^https?:\/\//i.test(part) ? (
-          <a
-            key={`${part}-${index}`}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {part}
-          </a>
-        ) : (
-          part
-        ),
-      )}
+      {parts.map((part, index) => renderInlinePart(part, `${part}-${index}`))}
     </p>
   );
 }
@@ -782,7 +802,12 @@ function MessageContextMenu({
       : []),
     { kind: "separator" },
     { kind: "action", action: "refresh", label: "Refresh", icon: RefreshCw },
-    { kind: "action", action: "copy-id", label: "Copy message ID", icon: Clipboard },
+    {
+      kind: "action",
+      action: "copy-id",
+      label: "Copy message ID",
+      icon: Clipboard,
+    },
   ];
 
   useEffect(() => {

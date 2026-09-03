@@ -87,7 +87,13 @@ const navIcons = {
   settings: Settings,
 };
 
-const mobileNavItems = ["inbox", "tickets", "search", "phones", "settings"] as const;
+const mobileNavItems = [
+  "inbox",
+  "tickets",
+  "search",
+  "phones",
+  "settings",
+] as const;
 
 export function App() {
   const [session, setSession] = useState<AuthSession | null>(() =>
@@ -398,12 +404,14 @@ function Workbench({
   const cannedResponses = useAsyncData(() => api.cannedResponses(), [api]);
   const me = useAsyncData(() => api.me(), [api]);
   const aiConnections = useAsyncData(
-    () => (session.role === "admin" ? api.aiConnections() : Promise.resolve([])),
+    () =>
+      session.role === "admin" ? api.aiConnections() : Promise.resolve([]),
     [api, session.role],
   );
 
   const mappedTickets = useMemo(
-    () => (tickets.data ?? []).map((ticket) => toUiTicket(ticket, team.data ?? [])),
+    () =>
+      (tickets.data ?? []).map((ticket) => toUiTicket(ticket, team.data ?? [])),
     [tickets.data, team.data],
   );
   const mappedChannels = useMemo(
@@ -695,34 +703,43 @@ function Workbench({
         break;
       case "pin":
       case "unpin":
-        await runAction(async () => {
-          await api.applyChannelAction(channel.id, {
-            action: "pin",
-            pinned: action === "pin",
-          });
-          await channels.refresh();
-        }, action === "pin" ? "Chat pinned" : "Chat unpinned");
+        await runAction(
+          async () => {
+            await api.applyChannelAction(channel.id, {
+              action: "pin",
+              pinned: action === "pin",
+            });
+            await channels.refresh();
+          },
+          action === "pin" ? "Chat pinned" : "Chat unpinned",
+        );
         break;
       case "mute":
       case "unmute":
-        await runAction(async () => {
-          await api.applyChannelAction(channel.id, {
-            action: "mute",
-            muted: action === "mute",
-          });
-          await channels.refresh();
-        }, action === "mute" ? "Chat muted" : "Chat unmuted");
+        await runAction(
+          async () => {
+            await api.applyChannelAction(channel.id, {
+              action: "mute",
+              muted: action === "mute",
+            });
+            await channels.refresh();
+          },
+          action === "mute" ? "Chat muted" : "Chat unmuted",
+        );
         break;
       case "archive":
       case "unarchive":
-        await runAction(async () => {
-          await api.applyChannelAction(channel.id, {
-            action: "archive",
-            archived: action === "archive",
-          });
-          setActiveChannelId("");
-          await channels.refresh();
-        }, action === "archive" ? "Chat archived" : "Chat restored");
+        await runAction(
+          async () => {
+            await api.applyChannelAction(channel.id, {
+              action: "archive",
+              archived: action === "archive",
+            });
+            setActiveChannelId("");
+            await channels.refresh();
+          },
+          action === "archive" ? "Chat archived" : "Chat restored",
+        );
         break;
       case "copy-title":
         void navigator.clipboard.writeText(channel.title).then(
@@ -995,7 +1012,9 @@ function Workbench({
                 <ContextPanel
                   channel={activeChannel}
                   tickets={mappedTickets.filter(
-                    (ticket) => ticket.status !== "closed",
+                    (ticket) =>
+                      ticket.status !== "closed" &&
+                      ticket.channelId === activeChannel.id,
                   )}
                   initialTab={contextTab}
                   onClose={() => setContextOpen(false)}
@@ -1088,7 +1107,10 @@ function Workbench({
               }}
             >
               <Icon size={19} aria-hidden="true" />
-              <span>{id[0]?.toUpperCase()}{id.slice(1)}</span>
+              <span>
+                {id[0]?.toUpperCase()}
+                {id.slice(1)}
+              </span>
             </button>
           );
         })}
@@ -1127,7 +1149,6 @@ function Workbench({
     </div>
   );
 }
-
 
 function buildNavItems(
   ops: ApiOpsSummary | null,
