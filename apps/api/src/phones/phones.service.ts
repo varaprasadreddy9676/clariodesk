@@ -260,7 +260,12 @@ export class PhonesService {
           fallbackChatTitle(providerChatId, chat.channelType);
         const avatarUrl = chat.avatarUrl?.trim() || null;
         const [existing] = await tx
-          .select({ id: schema.channels.id })
+          .select({
+            id: schema.channels.id,
+            status: schema.channels.status,
+            isPinned: schema.channels.isPinned,
+            isMuted: schema.channels.isMuted,
+          })
           .from(schema.channels)
           .where(
             and(
@@ -272,12 +277,30 @@ export class PhonesService {
           .limit(1);
 
         if (existing) {
+          // Reconcile pin/mute/archive from the phone's own state — the same
+          // logic ChannelsService.refreshChannel() already applies to a
+          // single chat, but a bulk sync never ran it, so a chat archived
+          // directly on the phone never showed up as archived here even
+          // after re-syncing.
+          const nextStatus =
+            chat.isArchived != null
+              ? chat.isArchived
+                ? "archived"
+                : existing.status === "archived"
+                  ? chat.channelType === "group"
+                    ? "unmapped"
+                    : "active"
+                  : existing.status
+              : existing.status;
           await tx
             .update(schema.channels)
             .set({
               channelType: chat.channelType,
               ...(title ? { title, subject: title } : {}),
               ...(avatarUrl ? { avatarUrl } : {}),
+              isPinned: chat.isPinned ?? existing.isPinned,
+              isMuted: chat.isMuted ?? existing.isMuted,
+              status: nextStatus,
               updatedAt: now,
             })
             .where(eq(schema.channels.id, existing.id));

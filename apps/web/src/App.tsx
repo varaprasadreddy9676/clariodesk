@@ -825,17 +825,15 @@ function Workbench({
         />
         <Toast toast={toast} />
         {activeNav === "inbox" ? (
-          channels.status === "loading" || channels.status === "idle" ? (
-            <div className="inbox-grid context-closed">
-              <div className="channel-list-stack">
-                <div className="channel-list-skeleton" aria-hidden="true">
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="channel-row-skeleton" />
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : channels.status === "error" ? (
+          // Gate the skeleton/retry screens on "no data has ever loaded",
+          // not on "a refresh is in flight" -- selectChannel() triggers a
+          // background channels.refresh() on the first click into any
+          // unread chat, and channels.status briefly becomes "loading"/
+          // "error" for that alone. Reusing status here used to tear down
+          // the whole inbox (list, timeline, composer, context panel) and
+          // replace it with a skeleton every time, which read as the app
+          // "refreshing" on an ordinary click.
+          channels.data == null && channels.status === "error" ? (
             <div className="page-panel center-panel">
               <p role="alert" className="form-error">
                 {channels.error}
@@ -847,6 +845,16 @@ function Workbench({
               >
                 Retry
               </button>
+            </div>
+          ) : channels.data == null ? (
+            <div className="inbox-grid context-closed">
+              <div className="channel-list-stack">
+                <div className="channel-list-skeleton" aria-hidden="true">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="channel-row-skeleton" />
+                  ))}
+                </div>
+              </div>
             </div>
           ) : activeChannel ? (
             <div

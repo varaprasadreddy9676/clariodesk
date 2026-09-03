@@ -49,7 +49,7 @@ export function ChannelList({
   const rowVirtualizer = useVirtualizer({
     count: channels.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 72,
+    estimateSize: () => 56,
     overscan: 8,
   });
   // On mobile, this panel is toggled via CSS display:none (swapping to the
@@ -216,13 +216,16 @@ export function ChannelList({
                     </span>
                     <span className="channel-row-body">
                       <span className="channel-row-top">
-                        <strong className="channel-name">
+                        <strong className="channel-name" title={channel.title}>
                           {channel.title}
                         </strong>
                         <span className="channel-time">{channel.lastTime}</span>
                       </span>
                       <span className="channel-row-bottom">
-                        <span className="channel-preview">
+                        <span
+                          className="channel-preview"
+                          title={channel.lastMessage}
+                        >
                           {channel.lastMessage}
                         </span>
                         <span className="channel-counters">
