@@ -9,6 +9,7 @@ import {
   Users,
 } from "lucide-react";
 import { useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Channel } from "../types.js";
 import type { ChannelView } from "../lib/whatsapp-sort.js";
 import { avatarColor, avatarInitials } from "../lib/avatar.js";
@@ -39,6 +40,19 @@ export function ChannelList({
 }) {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Rows vary slightly in height (unread badge, muted/pinned icons, ticket
+  // count), so estimateSize is a starting guess — measureElement corrects it
+  // per row after first render. Without virtualizing here, a real workspace
+  // with a few thousand synced WhatsApp chats renders every row into the DOM
+  // at once (confirmed: ~9.7k list-related nodes, ~75MB heap for the list
+  // alone on a 1,600-chat account).
+  const rowVirtualizer = useVirtualizer({
+    count: channels.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 72,
+    overscan: 8,
+  });
 
   function startLongPress(channel: Channel, e: React.TouchEvent) {
     longPressFired.current = false;
@@ -112,113 +126,135 @@ export function ChannelList({
         ))}
       </div>
 
-      <div className="channel-rows" role="list">
+      <div className="channel-rows" role="list" ref={scrollRef}>
         {channels.length === 0 ? (
           <div className="empty-panel">
             <strong>No channels match</strong>
             <span>Sync chats from a connected phone or clear the filter.</span>
           </div>
-        ) : null}
-        {channels.map((channel) => (
+        ) : (
           <div
-            key={channel.id}
-            role="listitem"
-            className={`channel-row ${activeId === channel.id ? "is-active" : ""}${channel.unread > 0 ? " is-unread" : ""}`}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              onOpenMenu(channel, event.clientX, event.clientY);
+            style={{
+              position: "relative",
+              height: rowVirtualizer.getTotalSize(),
+              width: "100%",
             }}
           >
-            <button
-              type="button"
-              className="channel-row-select"
-              onClick={() => {
-                if (longPressFired.current) {
-                  longPressFired.current = false;
-                  return;
-                }
-                onSelect(channel.id);
-              }}
-              onTouchStart={(e) => startLongPress(channel, e)}
-              onTouchEnd={cancelLongPress}
-              onTouchMove={cancelLongPress}
-              onTouchCancel={cancelLongPress}
-              onKeyDown={(event) => {
-                if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
-                event.preventDefault();
-                const rect = event.currentTarget.getBoundingClientRect();
-                onOpenMenu(channel, rect.right - 12, rect.top + 12);
-              }}
-            >
-            <span
-              className="channel-avatar"
-              style={{ background: avatarColor(channel.title) }}
-              aria-hidden="true"
-            >
-              {channel.channelType === "group" ? (
-                <Users size={20} />
-              ) : avatarInitials(channel.title) === "#" ? (
-                <User size={20} />
-              ) : (
-                avatarInitials(channel.title)
-              )}
-              {channel.avatarUrl ? (
-                <img
-                  src={channel.avatarUrl}
-                  alt=""
-                  referrerPolicy="no-referrer"
-                  onError={(event) => {
-                    event.currentTarget.hidden = true;
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const channel = channels[virtualRow.index];
+              if (!channel) return null;
+              return (
+                <div
+                  key={channel.id}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  role="listitem"
+                  className={`channel-row ${activeId === channel.id ? "is-active" : ""}${channel.unread > 0 ? " is-unread" : ""}`}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualRow.start}px)`,
                   }}
-                />
-              ) : null}
-            </span>
-            <span className="channel-row-body">
-              <span className="channel-row-top">
-                <strong className="channel-name">{channel.title}</strong>
-                <span className="channel-time">{channel.lastTime}</span>
-              </span>
-              <span className="channel-row-bottom">
-                <span className="channel-preview">{channel.lastMessage}</span>
-                <span className="channel-counters">
-                  {channel.isMuted ? (
-                    <BellOff size={13} aria-label="Muted" />
-                  ) : null}
-                  {channel.isPinned ? <Pin size={13} aria-label="Pinned" /> : null}
-                  {channel.unread > 0 ? (
-                    <span className="channel-badge">{channel.unread}</span>
-                  ) : null}
-                </span>
-              </span>
-              <span className="channel-meta">
-                <span className="channel-kind">
-                  {channel.channelType === "group" ? "Group" : "Direct"}
-                  {channel.client ? ` · ${channel.client}` : ""}
-                </span>
-                <PhoneStatusPill status={channel.phoneStatus} />
-                <WaitingPill since={channel.awaitingResponseSince} />
-                {channel.openTickets > 0 ? (
-                  <em className="channel-tickets">
-                    {channel.openTickets} tickets
-                  </em>
-                ) : null}
-              </span>
-            </span>
-            </button>
-            <button
-              type="button"
-              className="channel-row-menu"
-              aria-label={`More actions for ${channel.title}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                const rect = event.currentTarget.getBoundingClientRect();
-                onOpenMenu(channel, rect.right - 8, rect.bottom + 4);
-              }}
-            >
-              <MoreVertical size={17} aria-hidden="true" />
-            </button>
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    onOpenMenu(channel, event.clientX, event.clientY);
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="channel-row-select"
+                    onClick={() => {
+                      if (longPressFired.current) {
+                        longPressFired.current = false;
+                        return;
+                      }
+                      onSelect(channel.id);
+                    }}
+                    onTouchStart={(e) => startLongPress(channel, e)}
+                    onTouchEnd={cancelLongPress}
+                    onTouchMove={cancelLongPress}
+                    onTouchCancel={cancelLongPress}
+                    onKeyDown={(event) => {
+                      if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+                      event.preventDefault();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      onOpenMenu(channel, rect.right - 12, rect.top + 12);
+                    }}
+                  >
+                  <span
+                    className="channel-avatar"
+                    style={{ background: avatarColor(channel.title) }}
+                    aria-hidden="true"
+                  >
+                    {channel.channelType === "group" ? (
+                      <Users size={20} />
+                    ) : avatarInitials(channel.title) === "#" ? (
+                      <User size={20} />
+                    ) : (
+                      avatarInitials(channel.title)
+                    )}
+                    {channel.avatarUrl ? (
+                      <img
+                        src={channel.avatarUrl}
+                        alt=""
+                        referrerPolicy="no-referrer"
+                        onError={(event) => {
+                          event.currentTarget.hidden = true;
+                        }}
+                      />
+                    ) : null}
+                  </span>
+                  <span className="channel-row-body">
+                    <span className="channel-row-top">
+                      <strong className="channel-name">{channel.title}</strong>
+                      <span className="channel-time">{channel.lastTime}</span>
+                    </span>
+                    <span className="channel-row-bottom">
+                      <span className="channel-preview">{channel.lastMessage}</span>
+                      <span className="channel-counters">
+                        {channel.isMuted ? (
+                          <BellOff size={13} aria-label="Muted" />
+                        ) : null}
+                        {channel.isPinned ? <Pin size={13} aria-label="Pinned" /> : null}
+                        {channel.unread > 0 ? (
+                          <span className="channel-badge">{channel.unread}</span>
+                        ) : null}
+                      </span>
+                    </span>
+                    <span className="channel-meta">
+                      <span className="channel-kind">
+                        {channel.channelType === "group" ? "Group" : "Direct"}
+                        {channel.client ? ` · ${channel.client}` : ""}
+                      </span>
+                      <PhoneStatusPill status={channel.phoneStatus} />
+                      <WaitingPill since={channel.awaitingResponseSince} />
+                      {channel.openTickets > 0 ? (
+                        <em className="channel-tickets">
+                          {channel.openTickets} tickets
+                        </em>
+                      ) : null}
+                    </span>
+                  </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="channel-row-menu"
+                    aria-label={`More actions for ${channel.title}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      onOpenMenu(channel, rect.right - 8, rect.bottom + 4);
+                    }}
+                  >
+                    <MoreVertical size={17} aria-hidden="true" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
-        ))}
+        )}
       </div>
     </section>
   );
