@@ -8,6 +8,13 @@ started this effort (also summarized in `docs/design/design-system.md`,
 which this pass supersedes/refines where they conflict — this checklist's
 token values win).
 
+**Handing this off to another agent?** Read
+[`docs/design/redesign-implementation-guide.md`](./redesign-implementation-guide.md)
+first — it has concrete file/line-level findings and per-screen instructions
+for everything still unchecked below, produced by actually reading this
+codebase rather than generic advice. Update this checklist's checkboxes and
+add a session-log entry as you complete each item.
+
 **Ground rules for every screen touched:**
 - Preserve all fields, actions, navigation destinations, and business logic.
 - No font size above what's specified below just to "look modern" — normal
