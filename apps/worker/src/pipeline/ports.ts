@@ -72,6 +72,8 @@ export interface NormalizationStore {
     phoneInstanceId: string;
     providerChatId: string;
     channelType: "group" | "direct" | "official_direct";
+    /** Seeds the title when creating a brand-new channel; ignored otherwise. */
+    chatTitle?: string | null;
   }): Promise<ChannelContext>;
 
   /**

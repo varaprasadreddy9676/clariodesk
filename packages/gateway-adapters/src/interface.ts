@@ -146,6 +146,8 @@ export type GatewayChatMessage = {
   quotedProviderMessageId?: string | null;
   hasMedia?: boolean;
   media?: NonNullable<NormalizedGatewayEvent["media"]>;
+  /** The chat's current title, if already known — see NormalizedGatewayEvent.chatTitle. */
+  chatTitle?: string | null;
 };
 
 export interface WhatsAppGatewayAdapter {

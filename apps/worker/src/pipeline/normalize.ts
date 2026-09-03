@@ -67,6 +67,7 @@ export async function normalizeEvent(
     phoneInstanceId: ctx.phoneInstanceId,
     providerChatId: event.providerChatId,
     channelType: event.channelType,
+    chatTitle: event.chatTitle,
   });
 
   // 0a. Delete-for-everyone: mark the target deleted, keep evidence (TDD §18).

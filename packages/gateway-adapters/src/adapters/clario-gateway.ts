@@ -50,6 +50,7 @@ type GatewayMessagePayload = {
   fromMe?: boolean;
   quotedMessageId?: string | null;
   hasMedia?: boolean;
+  chatTitle?: string | null;
 };
 
 const CAPABILITIES: GatewayCapabilities = {
@@ -406,6 +407,7 @@ function toGatewayChatMessage(
       Number(message.timestamp ?? Math.floor(Date.now() / 1000)) * 1000,
     quotedProviderMessageId: message.quotedMessageId ?? null,
     hasMedia: Boolean(message.hasMedia),
+    chatTitle: message.chatTitle ?? null,
     ...(message.hasMedia
       ? {
           media: [
@@ -450,6 +452,7 @@ function toNormalizedEvent(
       : {}),
     quotedProviderMessageId: message.quotedProviderMessageId ?? undefined,
     providerTimestampMs: message.providerTimestampMs,
+    chatTitle: message.chatTitle ?? undefined,
     isHistorySync,
     raw: message,
   };

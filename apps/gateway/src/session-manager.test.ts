@@ -178,3 +178,58 @@ describe("GatewaySession conversation operations", () => {
     );
   });
 });
+
+describe("GatewaySession message normalization", () => {
+  function waMessage(over: Record<string, unknown> = {}) {
+    return {
+      key: { remoteJid: "120363@g.us", id: "MSG1", fromMe: false },
+      message: { conversation: "Hi there" },
+      messageTimestamp: 1_700_000_000,
+      ...over,
+    };
+  }
+
+  it("attaches the chat's already-known name as chatTitle on a new message", async () => {
+    const session = readySession(
+      {},
+      {
+        id: "120363@g.us",
+        isGroup: true,
+        name: "Acme Support Group",
+        pinned: false,
+        muted: false,
+        archived: false,
+      },
+    );
+    const internals = session as unknown as {
+      recordMessage: (
+        message: unknown,
+        isHistory: boolean,
+        persist?: boolean,
+      ) => Promise<{ chatTitle: string | null } | null>;
+    };
+
+    const normalized = await internals.recordMessage(waMessage(), false, false);
+
+    expect(normalized?.chatTitle).toBe("Acme Support Group");
+  });
+
+  it("leaves chatTitle null when the chat's name isn't known yet", async () => {
+    const session = readySession({});
+    const internals = session as unknown as {
+      recordMessage: (
+        message: unknown,
+        isHistory: boolean,
+        persist?: boolean,
+      ) => Promise<{ chatTitle: string | null } | null>;
+    };
+
+    const normalized = await internals.recordMessage(
+      waMessage({ key: { remoteJid: "999@g.us", id: "MSG2", fromMe: false } }),
+      false,
+      false,
+    );
+
+    expect(normalized?.chatTitle).toBeNull();
+  });
+});

@@ -204,6 +204,7 @@ describe("ClarioGatewayAdapter", () => {
         providerTimestampMs: 1781360000000,
         quotedProviderMessageId: null,
         hasMedia: false,
+        chatTitle: null,
       },
     ]);
   });

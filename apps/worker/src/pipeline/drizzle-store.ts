@@ -42,9 +42,10 @@ export class DrizzleNormalizationStore implements NormalizationStore {
     phoneInstanceId: string;
     providerChatId: string;
     channelType: "group" | "direct" | "official_direct";
+    chatTitle?: string | null;
   }): Promise<ChannelContext> {
     const existing = await this.db
-      .select({ id: channels.id })
+      .select({ id: channels.id, title: channels.title })
       .from(channels)
       .where(
         and(
@@ -56,6 +57,16 @@ export class DrizzleNormalizationStore implements NormalizationStore {
       .limit(1);
 
     let channelId = existing[0]?.id;
+    const chatTitle = input.chatTitle?.trim() || null;
+    if (channelId && !existing[0]?.title && chatTitle) {
+      // Self-heal a channel that was created before its name was known (or
+      // before this backfill existed) — never overwrites a title that's
+      // already set, only fills one in that's still blank.
+      await this.db
+        .update(channels)
+        .set({ title: chatTitle, updatedAt: new Date() })
+        .where(eq(channels.id, channelId));
+    }
     if (!channelId) {
       const inserted = await this.db
         .insert(channels)
@@ -65,6 +76,7 @@ export class DrizzleNormalizationStore implements NormalizationStore {
           providerChatId: input.providerChatId,
           channelType: input.channelType,
           status: "unmapped",
+          title: chatTitle,
         })
         .onConflictDoNothing()
         .returning({ id: channels.id });
