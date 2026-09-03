@@ -495,6 +495,13 @@ export class ClarioApiClient {
     return this.request(`/contacts/search?q=${encodeURIComponent(query)}`);
   }
 
+  draftAiReply(channelId: string): Promise<{ draft: string }> {
+    return this.request(`/channels/${channelId}/ai/draft-reply`, {
+      method: "POST",
+      timeoutMs: 25_000,
+    });
+  }
+
   teamMembers(): Promise<ApiTeamMember[]> {
     return this.request("/team/members");
   }

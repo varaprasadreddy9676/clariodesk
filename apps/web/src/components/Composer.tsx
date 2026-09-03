@@ -4,6 +4,7 @@ import {
   Send,
   Signature as SignatureIcon,
   Smile,
+  Sparkles,
   X,
   Zap,
 } from "lucide-react";
@@ -49,6 +50,7 @@ export function Composer({
   const [signOutbound, setSignOutbound] = useState(true);
   const [submitState, setSubmitState] = useState<"idle" | "sending">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [drafting, setDrafting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replyBlocked = channel.phoneStatus === "degraded";
@@ -124,6 +126,21 @@ export function Composer({
       textarea?.focus();
       textarea?.setSelectionRange(next.caret, next.caret);
     });
+  }
+
+  async function suggestReply() {
+    if (drafting) return;
+    setDrafting(true);
+    setError(null);
+    try {
+      const { draft: suggestion } = await api.draftAiReply(channel.id);
+      setBody(suggestion);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not draft a reply");
+    } finally {
+      setDrafting(false);
+    }
   }
 
   function insertQuickReply(text: string) {
@@ -263,6 +280,15 @@ export function Composer({
                   />
                 ) : null}
               </div>
+              <button
+                type="button"
+                aria-label="Suggest a reply with AI"
+                title="Suggest a reply with AI"
+                disabled={drafting}
+                onClick={() => void suggestReply()}
+              >
+                <Sparkles size={18} className={drafting ? "is-spinning" : ""} />
+              </button>
               {signature ? (
                 <button
                   type="button"
